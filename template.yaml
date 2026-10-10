@@ -643,6 +643,23 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
 
+  # ---------- maps (Amazon Location Service, vector tiles for the PWA) ----------
+  Map:
+    Type: AWS::Location::Map
+    Properties:
+      MapName: !Sub ${AWS::StackName}-map
+      Configuration: { Style: VectorEsriNavigation }
+
+  MapsKey:
+    Type: AWS::Location::APIKey
+    Properties:
+      KeyName: !Sub ${AWS::StackName}-maps
+      NoExpiry: true
+      Restrictions:
+        AllowActions: ["geo:GetMap*"]
+        AllowResources: [!GetAtt Map.MapArn]
+        AllowReferers: [!Sub "https://${SiteDistribution.DomainName}/*", "http://localhost:4173/*"]
+
   # ---------- ops ----------
   DispatchErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -856,6 +873,8 @@ Outputs:
   UserPoolId: { Value: !Ref UserPool }
   UserPoolClientId: { Value: !Ref UserPoolClient }
   CollectorClientId: { Value: !Ref CollectorClient }
+  MapsKeyName: { Value: !Ref MapsKey }
+  MapName: { Value: !Ref Map }
   GoogleEnabled: { Value: !If [HasGoogle, "true", "false"] }
   AuthDomain: { Value: !If [HasGoogle, !Sub "kabadi-connect-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com", ""] }
   TableName: { Value: !Ref Table }

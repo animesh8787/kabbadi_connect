@@ -51,6 +51,7 @@ export interface Batch {
   km: number;
   naiveKm: number;
   routeSource: string;
+  naiveOrder?: string[];
   estKg: number;
   stops: Stop[];
 }
@@ -60,6 +61,8 @@ export interface Impact {
   co2Kg: number;
   payout: number;
   kmSavedPct: number;
+  routeKm: number;
+  naiveKm: number;
   byCategory: Record<Category, number>;
   daily: { date: string; kg: number; pickups: number }[];
   ackKg: number;

@@ -11,11 +11,11 @@ describe("shared", () => {
     expect(d).toBeLessThan(28);
   });
   it("payout uses collector rates over defaults", () => {
-    expect(payout([{ cat: "metal", kg: 2 }])).toBe(60);
+    expect(payout([{ cat: "metal", kg: 2 }])).toBe(56);
     expect(payout([{ cat: "metal", kg: 2 }], { metal: 40 })).toBe(80);
   });
   it("co2 is a weighted sum", () => {
-    expect(co2Kg([{ cat: "paper", kg: 10 }])).toBe(30);
+    expect(co2Kg([{ cat: "paper", kg: 10 }])).toBe(39.4);
   });
   it("rejects duplicate categories and bad coords", () => {
     const base = { lat: 28.6, lng: 77.2, address: "12 Main Rd", date: "2026-10-12", slot: "morning" };

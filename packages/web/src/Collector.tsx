@@ -157,7 +157,11 @@ function EwasteCard() {
 function BatchCard({ batch, focusId, reload }: { batch: Batch; focusId?: string; reload: () => void }) {
   const t = useT();
   const live = batch.stops.filter((s) => s.status !== "CANCELLED");
-  const markers = useMemo(() => live.map((s, i) => ({ lat: s.lat, lng: s.lng, label: String(i + 1) })), [batch]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [naive, setNaive] = useState(false);
+  const canCompare = !!batch.naiveOrder && batch.naiveKm > batch.km && batch.km > 0;
+  const shown = naive && canCompare ? batch.naiveOrder!.map((id) => live.find((s) => s.id === id)).filter((s): s is Stop => !!s) : live;
+  const markers = useMemo(() => shown.map((s, i) => ({ lat: s.lat, lng: s.lng, label: String(i + 1) })), [batch, naive]); // eslint-disable-line react-hooks/exhaustive-deps
+  const savedPct = canCompare ? Math.round(((batch.naiveKm - batch.km) / batch.naiveKm) * 100) : 0;
   const kg = live.reduce((s, x) => s + x.estKg, 0);
   return (
     <section className="card">
@@ -167,6 +171,21 @@ function BatchCard({ batch, focusId, reload }: { batch: Batch; focusId?: string;
       <p className="muted">
         {batch.window.replace("#", " · ")} · {batch.km} km
       </p>
+      {canCompare && (
+        <>
+          <div className="actions">
+            <button type="button" className={!naive ? "chip on" : "chip"} aria-pressed={!naive} onClick={() => setNaive(false)}>
+              {t("routeOpt")}
+            </button>
+            <button type="button" className={naive ? "chip on" : "chip"} aria-pressed={naive} onClick={() => setNaive(true)}>
+              {t("routeReq")}
+            </button>
+          </div>
+          <p className="muted" data-testid="route-badge">
+            {batch.km} {t("routeBadge")} {batch.naiveKm} km (−{savedPct}%)
+          </p>
+        </>
+      )}
       <MapView markers={markers} height={200} />
       {batch.status === "ASSIGNED" && (
         <button className="primary big" onClick={() => api.accept(batch.id).then(reload)}>

@@ -5,7 +5,7 @@ import { geohash } from "@kc/shared";
 import { ddb, TABLE } from "../lib/ddb.js";
 import { HttpError, json } from "../lib/http.js";
 import { takeQuota } from "../lib/quota.js";
-import { localOrder } from "../lib/routing.js";
+import { localOrder, tourKm } from "../lib/routing.js";
 import { istDate } from "../lib/time.js";
 import { provisionCollector } from "./admin.js";
 
@@ -37,7 +37,12 @@ export const handler = async (): Promise<APIGatewayProxyResult> => {
     const date = istDate(now);
     const batchId = randomUUID();
     const stops = STOPS.map((s) => ({ id: randomUUID(), lat: HOME.lat + s.dlat, lng: HOME.lng + s.dlng, ...s }));
-    const order = localOrder(HOME, stops.map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }))).map((s) => s.id);
+    const pts = stops.map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }));
+    const order = localOrder(HOME, pts).map((s) => s.id);
+    // Demo only: make the "request order" the zig-zag one so the comparison is visible; real batches use the true arrival order.
+    const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]].map((p) => p.map((i) => pts[i]!));
+    const naive = perms.reduce((worst, p) => (tourKm(HOME, p) > tourKm(HOME, worst) ? p : worst));
+    const naiveOrder = naive.map((s) => s.id);
 
     await ddb.send(
       new UpdateCommand({
@@ -63,8 +68,9 @@ export const handler = async (): Promise<APIGatewayProxyResult> => {
                 status: "ASSIGNED",
                 stops: order,
                 estKg: stops.reduce((a, s) => a + s.items.reduce((b, i) => b + KG[i.bucket]!, 0), 0),
-                km: 0,
-                naiveKm: 0,
+                km: tourKm(HOME, order.map((id) => pts.find((p) => p.id === id)!)),
+                naiveKm: tourKm(HOME, naive),
+                naiveOrder,
                 routeSource: "demo",
                 demo: true,
                 // No GSI1 keys: the stale-batch sweep and dispatcher must never touch demo rows.

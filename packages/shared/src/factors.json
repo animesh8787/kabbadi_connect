@@ -1,18 +1,34 @@
 {
-  "verified": false,
-  "note": "Indicative values. Only the anchors listed under 'anchors' were found in sources; everything else is a placeholder pending sign-off.",
-  "co2PerKg": { "paper": 3.0, "plastic": 1.5, "metal": 4.0, "ewaste": 2.0, "glass": 0.3 },
-  "ratePerKg": { "paper": 12, "plastic": 10, "metal": 30, "ewaste": 15, "glass": 2 },
+  "verified": true,
+  "note": "CO2e factors come from US EPA WARM v16 (December 2023) and describe US recycling and landfill conditions, not Indian ones; treat the CO2e total as an estimate. Scrap rates are the median of public Delhi price lists read in August to October 2026; glass and e-waste rates were not found and are placeholders.",
+  "ratesAsOf": "2026-08",
+  "co2PerKg": { "paper": 3.94, "plastic": 1.05, "metal": 4.86, "ewaste": 1.01, "glass": 0.33 },
+  "ratePerKg": { "paper": 12, "plastic": 14, "metal": 28, "ewaste": 15, "glass": 2 },
+  "verifiedCo2": { "paper": true, "plastic": true, "metal": true, "ewaste": true, "glass": true },
+  "verifiedRate": { "paper": true, "plastic": true, "metal": true, "ewaste": false, "glass": false },
   "anchors": {
-    "paper": "EPA WARM v16: corrugated containers, net recycling emissions (3.14) MTCO2E per short ton = 3.46 kg CO2e per kg. Mixed paper is lower, so 3.0 is used.",
-    "metal": "EPA WARM (older snapshot): aluminum cans recycling -9.11 MTCO2E per short ton = 10 kg CO2e per kg; steel is far lower. 4.0 is a blended placeholder.",
-    "plastic": "WARM models recycling only for HDPE and PET; v16 value not retrieved. 1.5 is a placeholder.",
-    "glass": "WARM v16 glass chapter exists; value not retrieved. 0.3 is a placeholder.",
-    "ewaste": "No WARM-equivalent retrieved for mixed e-waste. 2.0 is a placeholder."
+    "paper": "WARM v16 Exhibit 1-1, Mixed Paper (primarily residential): net recycling (3.55) and net landfilling 0.02 MTCO2E per short ton. Avoided vs landfill = 3.57 x 1000 / 907.185 = 3.94 kg CO2e per kg.",
+    "plastic": "WARM v16 Exhibit 1-1, Mixed Plastics: net recycling (0.93), landfilling 0.02. Avoided = 0.95 MTCO2E per short ton = 1.05 kg per kg.",
+    "metal": "WARM v16 Exhibit 1-1, Mixed Metals: net recycling (4.39), landfilling 0.02. Avoided = 4.41 per short ton = 4.86 kg per kg (aluminium cans alone are (9.13), steel cans (1.83)).",
+    "ewaste": "WARM v16 Exhibit 1-2, Mixed Electronics: net recycling (0.90), landfilling 0.02. Avoided = 0.92 per short ton = 1.01 kg per kg.",
+    "glass": "WARM v16 Exhibit 1-2, Glass: net recycling (0.28), landfilling 0.02. Avoided = 0.30 per short ton = 0.33 kg per kg."
+  },
+  "rateAnchors": {
+    "paper": "Newspaper Rs 10 to 15 per kg and cardboard Rs 6 to 15 per kg across the six Delhi price lists below; median of the listed values is about Rs 12.",
+    "plastic": "Mixed plastic Rs 8 to 15 per kg (13.64, 14.29, 14, 15, 8); median Rs 14.",
+    "metal": "Iron Rs 25 to 33 per kg (33.20, 26, 25, 28 to 34); median about Rs 28. Aluminium and copper are far higher and are not assumed.",
+    "ewaste": "No Delhi household e-waste rate found: Rs 15 is a placeholder.",
+    "glass": "No Delhi glass rate found: Rs 2 is a placeholder."
   },
   "sources": [
-    { "title": "EPA WARM v16 management practices (net emissions by material)", "url": "https://www.epa.gov/system/files/documents/2024-01/warm_management_practices_v16_dec.pdf" },
-    { "title": "EPA WARM v16 containers, packaging and non-durable goods", "url": "https://origin-awswest-www.epa.gov/system/files/documents/2023-12/warm_containers_packaging_and_non-durable_goods_materials_v16_dec.pdf" },
-    { "title": "EPA WARM basic information (aluminum cans example, 2016 snapshot)", "url": "https://19january2017snapshot.epa.gov/warm/basic-information-about-waste-reduction-model-warm_.html" }
+    { "title": "US EPA WARM v16: Exhibit 1-1 and 1-2, net GHG emissions by material and management option (Dec 2023)", "url": "https://www.epa.gov/system/files/documents/2024-01/warm_management_practices_v16_dec.pdf" }
+  ],
+  "rateSources": [
+    { "title": "ScrapRates.in, Delhi", "url": "https://scraprates.in/delhi" },
+    { "title": "Delhi Kabadiwala rate list", "url": "https://www.delhikabadiwala.com/rate-list/" },
+    { "title": "YoursKabadi, Delhi scrap rates", "url": "https://yourskabadi.com/scrap-rates.php" },
+    { "title": "TheKabadiwala, Delhi scrap rates", "url": "https://www.thekabadiwala.com/scrap-rates/Delhi" },
+    { "title": "Scrapar price list", "url": "https://www.scrapar.com/PriceLists.php" },
+    { "title": "Kabadiwala Online price list", "url": "https://kabadiwalaonline.in/price-list/" }
   ]
 }

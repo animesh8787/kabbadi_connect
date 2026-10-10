@@ -157,6 +157,7 @@ export const handler = async (): Promise<{ batches: number; open: number }> => {
                   window: plan.window,
                   status: "ASSIGNED",
                   stops: routed.order,
+                  naiveOrder: plan.requestIds, // the order requests came in, for the before/after comparison
                   estKg,
                   km: routed.km,
                   naiveKm: routed.naiveKm,

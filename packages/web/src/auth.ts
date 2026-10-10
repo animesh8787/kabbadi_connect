@@ -12,6 +12,9 @@ export interface Config {
   clientId: string;
   collectorClientId: string;
   googleEnabled?: boolean;
+  mapsKey?: string;
+  mapsRegion?: string;
+  mapName?: string;
   authDomain?: string;
 }
 export interface Session {
@@ -33,6 +36,7 @@ export async function loadConfig(): Promise<Config> {
   return cfg;
 }
 export const apiUrl = () => cfg.apiUrl;
+export const mapsConfig = () => ({ key: cfg?.mapsKey ?? "", region: cfg?.mapsRegion ?? "ap-south-1", map: cfg?.mapName ?? "" });
 export const googleEnabled = () => Boolean(cfg?.googleEnabled && cfg.authDomain);
 
 function parse(idToken: string, refreshToken: string, clientId: string): Session {

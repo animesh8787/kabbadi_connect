@@ -178,7 +178,7 @@ ok(Math.abs(after2.ackKg - before2.ackKg - 7) < 0.01, "impact household-confirme
 
 // photo estimate against real Bedrock vision: a valid answer or a clean 422, never a 500
 const photo = await call(base, "POST", "/photo-estimate", household, { image: readFileSync("scripts/fixtures/pile.jpg").toString("base64") });
-ok([200, 422, 503].includes(photo.status), `photo estimate answered cleanly (${photo.status}${photo.status === 200 ? ": " + JSON.stringify(photo.data.items) : ""})`);
+ok([200, 422].includes(photo.status), `photo estimate worked (model or label fallback) (${photo.status}${photo.status === 200 ? ": " + JSON.stringify(photo.data.items) : ""})`);
 ok((await call(base, "POST", "/photo-estimate", card, { image: "x" })).status === 403, "collector cannot use photo estimate");
 
 // revoke
@@ -194,6 +194,11 @@ try {
 ok(blocked, "old card code stays dead after re-issue");
 ok(Boolean(await cardSignIn(collectorClientId, username, reissued.data.code)), "replacement card signs in");
 
+// ---------------- public landing counters ----------------
+const pub = await fetch(`${base}/public/impact`);
+const pubData: any = await pub.json();
+ok(pub.status === 200 && typeof pubData.kg === "number" && !("payout" in pubData) && !("daily" in pubData), "public impact endpoint answers without login and exposes totals only");
+
 // ---------------- public judge demo (no login) ----------------
 console.log("\n-- judge demo --");
 const impactBefore = (await call(base, "GET", "/impact?days=30", admin)).data;
@@ -202,6 +207,7 @@ ok(demo.status === 200 && demo.data.code, "anyone can start a demo without loggi
 const demoToken = await cardSignIn(collectorClientId, demo.data.username, demo.data.code);
 const demoBatch = (await call(base, "GET", "/collector/batches/today", demoToken)).data.batches[0];
 ok(demoBatch?.stops.length === 3, "demo collector has a batch with 3 pickups");
+ok(demoBatch.km > 0 && demoBatch.naiveKm >= demoBatch.km && demoBatch.naiveOrder?.length === 3, `demo batch has a before/after route: ${demoBatch.km} km vs ${demoBatch.naiveKm} km`);
 ok(demoBatch.stops.some((s: any) => s.items.some((i: any) => i.cat === "ewaste")), "one demo pickup is e-waste (shows the recycler card)");
 ok((await call(base, "POST", `/batches/${demoBatch.id}/accept`, demoToken)).status === 200, "demo batch started");
 const dStop = demoBatch.stops[0];

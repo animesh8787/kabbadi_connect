@@ -27,6 +27,7 @@ export interface Call {
 export async function mockApi(page: Page, responses: Record<string, unknown>): Promise<Call[]> {
   const calls: Call[] = [];
   await page.route("**/tile.openstreetmap.org/**", (r) => r.abort());
+  await page.route("**/maps.geo.*.amazonaws.com/**", (r) => r.abort());
   await page.route("**/config.json", (r) =>
     r.fulfill({ json: { apiUrl: API, region: "ap-south-1", clientId: "c", collectorClientId: "cc" } }),
   );

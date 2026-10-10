@@ -7,8 +7,9 @@ test("login page and public methodology page render without a session", async ({
   await expect(page.getByRole("heading", { name: "Sign in to Kabadi Connect" })).toBeVisible();
   await page.goto("/methodology");
   await expect(page.getByRole("heading", { name: "How we count impact" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /EPA WARM v16 management practices/ })).toBeVisible();
-  await expect(page.getByText("indicative, not yet verified")).toBeVisible();
+  await expect(page.getByRole("link", { name: /US EPA WARM v16/ })).toBeVisible();
+  await expect(page.getByText(/landfilling minus recycling/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "ScrapRates.in, Delhi" })).toBeVisible();
 });
 
 test("household schedules a pickup with the chosen materials and pin", async ({ page }) => {
@@ -188,4 +189,19 @@ test("Google button appears only when the stack enables it", async ({ page }) =>
   );
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
+});
+
+test("collector compares the optimised route with the request order", async ({ page }) => {
+  await signInAs(page, ["collector"], "en");
+  const a = stop({ id: "s1", address: "A" });
+  const b = stop({ id: "s2", address: "B", lat: 28.71 });
+  await mockApi(page, {
+    "GET /collector/batches/today": { batches: [batch({ km: 2.1, naiveKm: 3.4, naiveOrder: ["s2", "s1"] }, [a, b])] },
+  });
+  await page.goto("/app");
+  await expect(page.getByTestId("route-badge")).toContainText("2.1 km instead of 3.4 km (−38%)");
+  await expect(page.getByRole("button", { name: "Optimised route" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Request order" }).click();
+  await expect(page.getByRole("button", { name: "Request order" })).toHaveAttribute("aria-pressed", "true");
+  // batches without comparison data (older ones) show no toggle
 });

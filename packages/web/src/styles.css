@@ -101,7 +101,7 @@ legend { font-weight: 600; margin-bottom: 8px; }
   .card { border: none; }
 }
 
-.leaflet-control-attribution a { text-decoration: underline; }
+.maplibregl-ctrl-attrib a, .leaflet-control-attribution a { text-decoration: underline; }
 
 /* ---------- brand: serif display, mono eyebrows, one italic accent word ---------- */
 h1, h2, .display { font-family: var(--display); font-weight: 400; letter-spacing: -0.01em; }

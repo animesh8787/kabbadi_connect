@@ -57,6 +57,15 @@ describe("public judge demo", () => {
     expect(JSON.stringify(reqs)).not.toMatch(/"phone"/); // no real or fake phone numbers to dial
   });
 
+  it("stores an optimised route that is shorter than the request order", async () => {
+    await handler();
+    const batch = db.commandCalls(TransactWriteCommand).at(-1)!.args[0].input.TransactItems![0]!.Put!.Item!;
+    expect(batch.naiveOrder).toHaveLength(3);
+    expect([...batch.naiveOrder].sort()).toEqual([...batch.stops].sort());
+    expect(batch.km).toBeGreaterThan(0);
+    expect(batch.naiveKm).toBeGreaterThanOrEqual(batch.km);
+  });
+
   it("keeps demo collectors out of dispatch by using a dummy area", async () => {
     await handler();
     const profile = db.commandCalls(TransactWriteCommand)[0]!.args[0].input.TransactItems!.find((t) => t.Put?.Item?.PK === "COL#demo-sub")!;

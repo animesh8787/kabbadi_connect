@@ -171,7 +171,7 @@ const en = {
   tabAdmin: "Impact",
   tabCollectors: "Collectors",
   back: "Back",
-  factorsNote: "CO₂ factors are indicative estimates pending verification.",
+  factorsNote: "CO₂ uses US EPA WARM factors applied to India: an estimate.",
 };
 
 const hi: typeof en = {
@@ -343,7 +343,7 @@ const hi: typeof en = {
   tabAdmin: "असर",
   tabCollectors: "कबाड़ीवाले",
   back: "वापस",
-  factorsNote: "CO₂ के आँकड़े अनुमानित हैं, सत्यापन बाकी है।",
+  factorsNote: "CO₂ के लिए अमेरिकी EPA WARM के आँकड़े इस्तेमाल हुए हैं: यह अनुमान है।",
 };
 
 export const dict = { en, hi };

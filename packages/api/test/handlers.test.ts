@@ -61,7 +61,7 @@ describe("confirmPickup", () => {
     db.on(GetCommand, { Key: { PK: "COL#c1", SK: "META" } }).resolves({ Item: { rates: { paper: 20 } } });
     db.on(TransactWriteCommand).resolves({});
     const res = await confirmPickup(ev("c1", "collector", body, { id: "r1" }));
-    expect(JSON.parse(res.body)).toMatchObject({ status: "PICKED", payout: 50, co2Kg: 7.5 });
+    expect(JSON.parse(res.body)).toMatchObject({ status: "PICKED", payout: 50, co2Kg: 9.85 });
     expect(db.commandCalls(TransactWriteCommand)[0]!.args[0].input.TransactItems).toHaveLength(3);
   });
 });

@@ -10,7 +10,8 @@ Everything here is either linked to a source I actually read, or marked as a gap
 | Most studies count waste pickers and leave out small kabadi shops and aggregators | Kabadiwalla Connect presentation, quoted in the same search results | Secondary; find the primary |
 | About 90% of India's e-waste is processed by the informal sector; about 45% of surveyed people prefer giving e-waste to kabadiwalas | A 2023 study surfaced by search (title not captured) | **Find and cite the exact paper before using** |
 | Delhi has six authorised e-waste dismantlers/recyclers on the 2023 list | [CPCB-approved list hosted by NDMC](https://www.ndmc.gov.in/pdf/cpcb_approved_list_of_e-waste_recyclers_dismantler.pdf), Delhi section (names and addresses are in `packages/shared/src/ewaste-recyclers.json`) | List dated 08-06-2023; check validity with DPCC/CPCB |
-| Recycling emission factors | [EPA WARM v16](https://www.epa.gov/system/files/documents/2024-01/warm_management_practices_v16_dec.pdf) | Only corrugated (3.14 MTCO2E/short ton) and the older aluminium-can figure were read; the rest of `factors.json` is placeholder |
+| Recycling emission factors (kg CO2e avoided per kg: paper 3.94, plastic 1.05, metal 4.86, e-waste 1.01, glass 0.33) | [EPA WARM v16, Exhibits 1-1 and 1-2](https://www.epa.gov/system/files/documents/2024-01/warm_management_practices_v16_dec.pdf), avoided = landfilling minus recycling | US conditions, applied to India; an estimate |
+| Default scrap rates (Rs per kg: paper 12, plastic 14, metal 28) | Median of six public Delhi price lists, read Aug to Oct 2026, listed in `factors.json` | Glass and e-waste rates not found, placeholders; rates vary by buyer and quality |
 
 **Not yet researched (do before the final write-up):** SWM Rules 2016 provisions on integrating waste pickers; Plastic Waste Management EPR rules; E-Waste (Management) Rules; local scrap rates in Delhi; DPDP Act duties for the voice and photo features.
 

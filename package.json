@@ -13,7 +13,8 @@
     "seed": "tsx scripts/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
     "card": "tsx scripts/card.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "qr": "tsx scripts/qr.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

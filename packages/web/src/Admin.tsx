@@ -36,7 +36,7 @@ export function Admin() {
         <Tile value={d.payout} label={t("paidOut")} />
         <Tile value={d.ackKg} label={t("confirmedKg")} />
         {d.segTotal > 0 && <Tile value={`${Math.round((d.segGood / d.segTotal) * 100)}%`} label={t("segRate")} />}
-        <Tile value={`${d.kmSavedPct}%`} label={`${t("routeSaved")} (${t("routeNote")})`} />
+        <Tile value={`${d.kmSavedPct}%`} label={`${t("routeSaved")} (${d.routeKm} km vs ${d.naiveKm} km, ${t("routeNote")})`} />
       </div>
       <section className="card">
         <h2>{t("byCategory")}</h2>

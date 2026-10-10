@@ -77,13 +77,14 @@ export function Judges() {
         <li>
           <em>"ghar par koi nahi"</em>: marks nobody home.
         </li>
+        <li>Under the map, switch between the optimised route and the order the requests came in to see the km saved.</li>
         <li>Nothing is saved until the collector says or taps yes. You can type the weights instead: every voice action has a button.</li>
         <li>Open the e-waste stop to see the government-listed authorised recyclers; open the Statement tab for the monthly statement.</li>
       </ul>
 
       <h2>3. Household side</h2>
       <p>
-        <a href="/">Sign up with an email</a> to book a pickup as a household (the app asks for the verification code Cognito emails you).
+        <a href="/login">Sign up with an email</a> to book a pickup as a household (the app asks for the verification code Cognito emails you).
       </p>
 
       <h2>What is live, and what is not</h2>

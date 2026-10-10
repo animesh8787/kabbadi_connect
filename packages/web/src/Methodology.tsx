@@ -46,18 +46,53 @@ export function Methodology() {
           {CATEGORIES.map((c) => (
             <tr key={c}>
               <td>{c}</td>
-              <td>{factors.co2PerKg[c]}</td>
+              <td>
+                {factors.co2PerKg[c]} <small>{factors.verifiedCo2[c] ? "sourced" : "placeholder"}</small>
+              </td>
               <td>{factors.anchors[c]}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      <p>
+        <strong>Avoided emissions = landfilling minus recycling</strong>, using the net figures in EPA WARM. {factors.note}
+      </p>
       <p className="error">
-        Status: <strong>{factors.verified ? "verified" : "indicative, not yet verified"}</strong>. {factors.note} Treat CO₂e as an order of magnitude: if the true
-        factors are half of these, the CO₂e figure halves too; kg and rupees do not change.
+        These are US factors applied to Indian conditions, so treat CO₂e as an estimate. If the true factors were half of these, the CO₂e total would halve; kg and rupees would not change.
       </p>
       <ul>
         {factors.sources.map((s) => (
+          <li key={s.url}>
+            <a href={s.url} rel="noreferrer" target="_blank">
+              {s.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+
+      <h2>Default rates (₹ per kg, as of {factors.ratesAsOf})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Material</th>
+            <th>Rate</th>
+            <th>Basis</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CATEGORIES.map((c) => (
+            <tr key={c}>
+              <td>{c}</td>
+              <td>
+                ₹{factors.ratePerKg[c]} <small>{factors.verifiedRate[c] ? "from price lists" : "placeholder"}</small>
+              </td>
+              <td>{factors.rateAnchors[c]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul>
+        {factors.rateSources.map((s) => (
           <li key={s.url}>
             <a href={s.url} rel="noreferrer" target="_blank">
               {s.title}
@@ -73,7 +108,7 @@ export function Methodology() {
           otherwise.
         </li>
         <li>Landfill diversion assumes the recorded material reaches recyclers; we do not yet track downstream sale.</li>
-        <li>Default rates are placeholders until local market rates are collected; collectors can post their own.</li>
+        <li>Rates vary a lot by buyer, quality and quantity; collectors can post their own, and totals from earlier pickups keep the numbers recorded at the time.</li>
       </ul>
 
       <h2>Privacy</h2>

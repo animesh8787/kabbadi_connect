@@ -59,6 +59,7 @@ export async function loadBatches(sub: string) {
       km: b.km,
       naiveKm: b.naiveKm,
       routeSource: b.routeSource,
+      naiveOrder: b.naiveOrder as string[] | undefined,
       estKg: stops.reduce((s, x) => s + x.estKg, 0),
       stops,
     };

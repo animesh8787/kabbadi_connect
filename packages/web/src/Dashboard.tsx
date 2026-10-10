@@ -229,7 +229,9 @@ function Rates() {
             ))}
           </tbody>
         </table>
-        <p className="muted">{t("d_rates_n")}</p>
+        <p className="muted">
+          {t("d_rates_n")} ({factors.ratesAsOf})
+        </p>
       </section>
       <section className="card">
         <h2>🔌 {t("ewaste_title")}</h2>
