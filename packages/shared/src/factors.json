@@ -1,0 +1,18 @@
+{
+  "verified": false,
+  "note": "Indicative values. Only the anchors listed under 'anchors' were found in sources; everything else is a placeholder pending sign-off.",
+  "co2PerKg": { "paper": 3.0, "plastic": 1.5, "metal": 4.0, "ewaste": 2.0, "glass": 0.3 },
+  "ratePerKg": { "paper": 12, "plastic": 10, "metal": 30, "ewaste": 15, "glass": 2 },
+  "anchors": {
+    "paper": "EPA WARM v16: corrugated containers, net recycling emissions (3.14) MTCO2E per short ton = 3.46 kg CO2e per kg. Mixed paper is lower, so 3.0 is used.",
+    "metal": "EPA WARM (older snapshot): aluminum cans recycling -9.11 MTCO2E per short ton = 10 kg CO2e per kg; steel is far lower. 4.0 is a blended placeholder.",
+    "plastic": "WARM models recycling only for HDPE and PET; v16 value not retrieved. 1.5 is a placeholder.",
+    "glass": "WARM v16 glass chapter exists; value not retrieved. 0.3 is a placeholder.",
+    "ewaste": "No WARM-equivalent retrieved for mixed e-waste. 2.0 is a placeholder."
+  },
+  "sources": [
+    { "title": "EPA WARM v16 management practices (net emissions by material)", "url": "https://www.epa.gov/system/files/documents/2024-01/warm_management_practices_v16_dec.pdf" },
+    { "title": "EPA WARM v16 containers, packaging and non-durable goods", "url": "https://origin-awswest-www.epa.gov/system/files/documents/2023-12/warm_containers_packaging_and_non-durable_goods_materials_v16_dec.pdf" },
+    { "title": "EPA WARM basic information (aluminum cans example, 2016 snapshot)", "url": "https://19january2017snapshot.epa.gov/warm/basic-information-about-waste-reduction-model-warm_.html" }
+  ]
+}

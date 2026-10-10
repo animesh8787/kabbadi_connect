@@ -1,0 +1,48 @@
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:api
+      - run: npm run build:web
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install aws-sam-cli && sam validate --lint --region ap-south-1
+
+  # Needs a GitHub OIDC role (human task H7): set repo variable AWS_DEPLOY_ROLE_ARN.
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - run: npm ci && pip install aws-sam-cli
+      - run: npm run build:api && npm run build:web
+      - run: sam deploy --stack-name kabadi-connect --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset
+      - run: node scripts/deploy-web.mjs

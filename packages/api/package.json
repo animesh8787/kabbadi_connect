@@ -1,0 +1,19 @@
+{
+  "name": "@kc/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@kc/shared": "*",
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@aws-sdk/client-sqs": "^3.700.0",
+    "@aws-sdk/client-sns": "^3.700.0",
+    "@aws-sdk/client-geo-routes": "^3.700.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.700.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/client-polly": "^3.700.0",
+    "@aws-sdk/client-transcribe-streaming": "^3.700.0",
+    "@aws-sdk/client-ssm": "^3.700.0"
+  }
+}

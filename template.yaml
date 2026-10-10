@@ -1,0 +1,601 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Kabadi Connect - pickup network for informal recyclers (serverless, ap-south-1)
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Receives alarm and budget notifications (leave empty to skip)
+  SmsEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Send real SMS to collectors. Needs India DLT registration first.
+  RoutesRegion:
+    Type: String
+    Default: ap-south-1
+    Description: Region used for Amazon Location Routes OptimizeWaypoints
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 10
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    CodeUri: packages/api/dist/
+    Timeout: 15
+    MemorySize: 256
+    Tracing: Active
+    Environment:
+      Variables:
+        TABLE: !Ref Table
+        TOPIC_ARN: !Ref OpsTopic
+        QUEUE_URL: !Ref RequestQueue
+        SMS_ENABLED: !Ref SmsEnabled
+        ROUTES_REGION: !Ref RoutesRegion
+        NODE_OPTIONS: --enable-source-maps
+
+Resources:
+  # ---------- data ----------
+  Table:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: PK, AttributeType: S }
+        - { AttributeName: SK, AttributeType: S }
+        - { AttributeName: GSI1PK, AttributeType: S }
+        - { AttributeName: GSI1SK, AttributeType: S }
+        - { AttributeName: GSI2PK, AttributeType: S }
+        - { AttributeName: GSI2SK, AttributeType: S }
+        - { AttributeName: GSI3PK, AttributeType: S }
+        - { AttributeName: GSI3SK, AttributeType: N }
+      KeySchema:
+        - { AttributeName: PK, KeyType: HASH }
+        - { AttributeName: SK, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema: [{ AttributeName: GSI1PK, KeyType: HASH }, { AttributeName: GSI1SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: GSI2
+          KeySchema: [{ AttributeName: GSI2PK, KeyType: HASH }, { AttributeName: GSI2SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+        - IndexName: GSI3
+          KeySchema: [{ AttributeName: GSI3PK, KeyType: HASH }, { AttributeName: GSI3SK, KeyType: RANGE }]
+          Projection: { ProjectionType: ALL }
+      TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      SSESpecification: { SSEEnabled: true }
+
+  RequestDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  RequestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RequestDLQ.Arn
+        maxReceiveCount: 5
+
+  OpsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: alias/aws/sns
+
+  OpsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref OpsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  # ---------- auth ----------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${AWS::StackName}-users
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{ Name: verified_email, Priority: 1 }]
+      Policies:
+        PasswordPolicy: { MinimumLength: 10, RequireLowercase: true, RequireUppercase: true, RequireNumbers: true, RequireSymbols: false }
+      LambdaConfig:
+        PostConfirmation: !GetAtt PostConfirmationFn.Arn
+        DefineAuthChallenge: !GetAtt DefineAuthFn.Arn
+        CreateAuthChallenge: !GetAtt CreateAuthFn.Arn
+        VerifyAuthChallengeResponse: !GetAtt VerifyAuthFn.Arn
+      UserPoolAddOns: { AdvancedSecurityMode: "OFF" }
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+
+  # Collectors sign in once with a QR card (custom auth) and stay signed in for years.
+  CollectorClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows: [ALLOW_CUSTOM_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 3650
+      TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+
+  DefineAuthFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: customAuth.define
+  CreateAuthFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: customAuth.create
+  VerifyAuthFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: customAuth.verify
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+
+  DefineAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DefineAuthFn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  CreateAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CreateAuthFn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+  VerifyAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VerifyAuthFn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  GroupHousehold:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: { UserPoolId: !Ref UserPool, GroupName: household }
+  GroupCollector:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: { UserPoolId: !Ref UserPool, GroupName: collector }
+  GroupAdmin:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: { UserPoolId: !Ref UserPool, GroupName: admin }
+
+  PostConfirmationFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: postConfirmation.handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: cognito-idp:AdminAddUserToGroup
+              # Wildcard on pool id avoids a pool <-> function dependency cycle.
+              Resource: !Sub arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
+
+  PostConfirmationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PostConfirmationFn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  # ---------- api ----------
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: v1
+      TracingEnabled: true
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'authorization,content-type'"
+        AllowMethods: "'GET,POST,PUT,OPTIONS'"
+      Auth:
+        DefaultAuthorizer: CognitoAuth
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn: !GetAtt UserPool.Arn
+            Identity: { Header: Authorization }
+      MethodSettings:
+        - { ResourcePath: "/*", HttpMethod: "*", ThrottlingBurstLimit: 50, ThrottlingRateLimit: 25, MetricsEnabled: true }
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers: { Access-Control-Allow-Origin: "'*'", Access-Control-Allow-Headers: "'authorization,content-type'" }
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers: { Access-Control-Allow-Origin: "'*'", Access-Control-Allow-Headers: "'authorization,content-type'" }
+
+  CreateRequestFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: requests.createRequest
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt RequestQueue.QueueName }
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /requests, Method: post } }
+
+  ListMyRequestsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: requests.listMyRequests
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /requests, Method: get } }
+
+  GetRequestFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: requests.getRequest
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}", Method: get } }
+
+  CancelRequestFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: requests.cancelRequest
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/cancel", Method: post } }
+
+  AckPickupFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: requests.ackPickup
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/ack", Method: post } }
+
+  CollectorTodayFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.collectorToday
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /collector/batches/today, Method: get } }
+
+  AcceptBatchFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.acceptBatch
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/batches/{id}/accept", Method: post } }
+
+  MarkMissedFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.markMissed
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/missed", Method: post } }
+
+  ConfirmPickupFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.confirmPickup
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/confirm", Method: post } }
+
+  UpsertCollectorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.upsertCollector
+      Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
+      Events:
+        Put: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/collectors/{id}", Method: put } }
+
+  ImpactFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: impact.impact
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /impact, Method: get } }
+
+  DispatchFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: dispatch.handler
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt OpsTopic.TopicName }
+        - Statement:
+            - { Effect: Allow, Action: geo-routes:OptimizeWaypoints, Resource: "*" }
+            # Direct-to-phone SMS cannot be scoped to a topic.
+            - { Effect: Allow, Action: sns:Publish, Resource: "*", Condition: { "Null": { "sns:TopicArn": "true" } } }
+      Events:
+        NewRequest:
+          Type: SQS
+          Properties: { Queue: !GetAtt RequestQueue.Arn, BatchSize: 10, MaximumBatchingWindowInSeconds: 5 }
+        Sweep:
+          Type: Schedule
+          Properties: { Schedule: rate(5 minutes) }
+
+  # ---------- collector admin ----------
+  CreateCollectorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: admin.createCollector
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - Effect: Allow
+              Action: [cognito-idp:AdminCreateUser, cognito-idp:AdminSetUserPassword, cognito-idp:AdminAddUserToGroup, cognito-idp:AdminGetUser, cognito-idp:AdminEnableUser]
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /admin/collectors, Method: post } }
+
+  ListCollectorsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: admin.listCollectors
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /admin/collectors, Method: get } }
+
+  EnrollCollectorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: admin.enrollCollector
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: [cognito-idp:AdminGetUser, cognito-idp:AdminEnableUser], Resource: !GetAtt UserPool.Arn }
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/collectors/{id}/enroll", Method: post } }
+
+  RevokeCollectorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: admin.revokeCollector
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: [cognito-idp:AdminDisableUser, cognito-idp:AdminUserGlobalSignOut], Resource: !GetAtt UserPool.Arn }
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/collectors/{id}/revoke", Method: post } }
+
+  AdminLedgerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.adminLedger
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/collectors/{id}/ledger", Method: get } }
+
+  CollectorLedgerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.collectorLedger
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /collector/ledger, Method: get } }
+
+  # ---------- voice assistant + photo estimate ----------
+  AssistantFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: assistant.assistant
+      Timeout: 29
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - !Ref SpeechPolicy
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /assistant, Method: post } }
+
+  SpeakFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: assistant.speakText
+      Timeout: 15
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - !Ref SpeechPolicy
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /speak, Method: post } }
+
+  PhotoEstimateFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: assistant.estimatePhoto
+      Timeout: 29
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - !Ref SpeechPolicy
+      Events:
+        Post: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /photo-estimate, Method: post } }
+
+  # Bedrock (India inference profile), Hindi speech, and optional Bhashini keys the owner adds to SSM later.
+  SpeechPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: bedrock:InvokeModel
+            Resource:
+              - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/in.anthropic.claude-haiku-4-5-20251001-v1:0
+              - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0
+          - { Effect: Allow, Action: polly:SynthesizeSpeech, Resource: "*" }
+          - { Effect: Allow, Action: transcribe:StartStreamTranscription, Resource: "*" }
+          - Effect: Allow
+            Action: ssm:GetParameters
+            Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kabadi/bhashini/*
+
+  # ---------- web hosting ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+
+  SiteOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_200
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOAC.Id
+            S3OriginConfig: { OriginAccessIdentity: "" }
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        # Single-page app: unknown paths serve index.html so client routes work on refresh.
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html }
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub ${SiteBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
+
+  # ---------- ops ----------
+  DispatchErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Dispatcher Lambda is failing
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref DispatchFn }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OpsTopic]
+
+  DlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Messages landed in the request dead-letter queue
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{ Name: QueueName, Value: !GetAtt RequestDLQ.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OpsTopic]
+
+  Api5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: API is returning 5xx
+      Namespace: AWS/ApiGateway
+      MetricName: 5XXError
+      Dimensions:
+        - { Name: ApiName, Value: !Sub "${AWS::StackName}-Api" }
+        - { Name: Stage, Value: v1 }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OpsTopic]
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}
+      DashboardBody: !Sub |
+        {"widgets":[
+          {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"API requests / 5xx","region":"${AWS::Region}","stat":"Sum","period":300,"metrics":[["AWS/ApiGateway","Count","ApiName","${AWS::StackName}-Api","Stage","v1"],[".","5XXError",".",".",".","."]]}},
+          {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"Dispatcher invocations / errors","region":"${AWS::Region}","stat":"Sum","period":300,"metrics":[["AWS/Lambda","Invocations","FunctionName","${DispatchFn}"],[".","Errors",".","."]]}},
+          {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"Request queue depth","region":"${AWS::Region}","stat":"Maximum","period":300,"metrics":[["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${RequestQueue.QueueName}"],[".",".",".","${RequestDLQ.QueueName}"]]}}
+        ]}
+
+  Budget:
+    Type: AWS::Budgets::Budget
+    Condition: HasAlertEmail
+    Properties:
+      Budget:
+        BudgetName: !Sub ${AWS::StackName}-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  ApiUrl: { Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/v1" }
+  UserPoolId: { Value: !Ref UserPool }
+  UserPoolClientId: { Value: !Ref UserPoolClient }
+  CollectorClientId: { Value: !Ref CollectorClient }
+  TableName: { Value: !Ref Table }
+  SiteBucketName: { Value: !Ref SiteBucket }
+  DistributionId: { Value: !Ref SiteDistribution }
+  SiteUrl: { Value: !Sub "https://${SiteDistribution.DomainName}" }

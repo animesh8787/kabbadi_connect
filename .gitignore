@@ -1,0 +1,7 @@
+node_modules
+dist
+.aws-sam
+*.tsbuildinfo
+.env*
+packages/web/public/config.json
+.seed-credentials.json

@@ -1,0 +1,16 @@
+{
+  "verified": false,
+  "source": {
+    "title": "List of Dismantlers/Recyclers as per the authorisation issued by SPCBs/PCCs under the E-Waste (Management) Rules (as on 08-06-2023), Delhi section; hosted by NDMC",
+    "url": "https://www.ndmc.gov.in/pdf/cpcb_approved_list_of_e-waste_recyclers_dismantler.pdf"
+  },
+  "note": "2023 list. Confirm the authorisation is still valid with DPCC/CPCB before sending material.",
+  "recyclers": [
+    { "name": "M/s Fozia Traders", "address": "Khasra No.13/1, Saboli Mandoli Industrial Area, Delhi-110093" },
+    { "name": "M/s Muskan Technologies", "address": "B-96, Okhla Industrial Area, Phase-1, Delhi-110020" },
+    { "name": "M/s Shivnath Computers", "address": "E-47/2, 1st Floor, Okhla Phase-2, Delhi-110019" },
+    { "name": "M/s Techchef E-Waste Solutions Private Limited", "address": "C-61, Top Floor, DDA Shed, Okhla Industrial Area, Delhi-110020" },
+    { "name": "M/s Greenscape Eco Management Private Ltd", "address": "348, Patparganj Industrial Area, Delhi-110020" },
+    { "name": "M/s Shree Raman E-Waste", "address": "Plot No. 7, Khasra No. 487, Peeragarhi Industrial Area, Peeragarhi Village, Delhi-110087" }
+  ]
+}
