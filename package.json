@@ -2,7 +2,9 @@
   "name": "kabadi-connect",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "typecheck": "tsc -b packages/shared packages/api && npm -w packages/web run typecheck",
     "test": "vitest run",
@@ -10,9 +12,12 @@
     "build:web": "npm -w packages/web run build",
     "seed": "tsx scripts/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "card": "tsx scripts/card.ts"
+    "card": "tsx scripts/card.ts",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^22.10.0",
     "aws-sdk-client-mock": "^4.1.0",

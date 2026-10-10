@@ -19,6 +19,8 @@ jobs:
       - run: npm test
       - run: npm run build:api
       - run: npm run build:web
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install aws-sam-cli && sam validate --lint --region ap-south-1

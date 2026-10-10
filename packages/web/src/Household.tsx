@@ -121,7 +121,7 @@ function NewPickup({ onCreated }: { onCreated: () => void }) {
         </label>
         <label>
           &nbsp;
-          <select value={slot} onChange={(e) => setSlot(e.target.value as "morning" | "evening")}>
+          <select aria-label={t("slot")} value={slot} onChange={(e) => setSlot(e.target.value as "morning" | "evening")}>
             <option value="morning">{t("morning")}</option>
             <option value="evening">{t("evening")}</option>
           </select>

@@ -5,3 +5,5 @@ dist
 .env*
 packages/web/public/config.json
 .seed-credentials.json
+test-results
+playwright-report

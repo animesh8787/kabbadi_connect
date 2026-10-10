@@ -96,3 +96,5 @@ legend { font-weight: 600; margin-bottom: 8px; }
   main > *:not(.print-area) { display: none; }
   .card { border: none; }
 }
+
+.leaflet-control-attribution a { text-decoration: underline; }

@@ -7,6 +7,8 @@ export interface OpenReq extends Pt {
   window: string; // "<date>#<slot>"
   windowStart: number; // epoch ms
   estKg: number;
+  /** Collectors that were given this request and never started it; they are skipped on re-offer. */
+  declined?: string[];
 }
 export interface Collector extends Pt {
   id: string;
@@ -29,7 +31,7 @@ const DISPATCH_LEAD_MS = 60 * 60 * 1000;
 export function planBatches(reqs: OpenReq[], collectors: Collector[], now: number): Plan[] {
   const groups = new Map<string, OpenReq[]>();
   for (const r of reqs) {
-    const k = `${r.gh5}|${r.window}`;
+    const k = `${r.gh5}|${r.window}|${[...(r.declined ?? [])].sort().join(",")}`;
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
   const load = new Map<string, number>(); // collectorId|window -> batches assigned this run
@@ -39,7 +41,7 @@ export function planBatches(reqs: OpenReq[], collectors: Collector[], now: numbe
     const kg = g.reduce((s, r) => s + r.estKg, 0);
     if (kg < BATCH_MIN_KG && first.windowStart - now > DISPATCH_LEAD_MS) continue;
     const centre = { lat: g.reduce((s, r) => s + r.lat, 0) / g.length, lng: g.reduce((s, r) => s + r.lng, 0) / g.length };
-    const eligible = collectors.filter((c) => c.active && c.areas.includes(first.gh5));
+    const eligible = collectors.filter((c) => c.active && c.areas.includes(first.gh5) && !first.declined?.includes(c.id));
     if (!eligible.length) continue;
     // Distance-from-centre order keeps each chunk geographically compact.
     const sorted = [...g].sort((a, b) => haversineKm(centre, a) - haversineKm(centre, b));

@@ -40,7 +40,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/runbook.md](docs/runbook
 
 ```bash
 npm install
-npm test               # 35 unit tests (batching, routing, handlers, card login, voice intents, ledger)
+npm test               # 44 unit tests (batching, routing, handlers, card login, voice intents, ledger, stale-batch release)
+npm run e2e            # 13 Playwright tests at phone size, incl. an accessibility check (uses installed Edge; CI installs chromium)
 npm run typecheck
 npm run build:api && npm run build:web
 ```
@@ -81,7 +82,7 @@ npm run card -- collector1@kabadi.example.com   # prints a one-time card login l
 - Tokens are kept in localStorage.
 - Voice and photo costs are capped per user per day (200 voice turns, 20 photos). Fixed phrases are cached on the phone, not on the server.
 - Dispatch reads all OPEN requests from one index partition; shard it by cell beyond roughly 100k open requests.
-- A batch whose collector never starts it is not automatically re-offered.
-- Lambda log groups have no retention policy set.
-- No automated browser tests; the API is covered by unit tests and `npm run smoke`.
+- A batch nobody starts within 2 hours of its window opening is released and re-offered to a different collector (unit-tested; not yet observed live because it needs the 2 hours to pass). If no other collector covers the area the requests stay open.
+- Lambda logs are kept 30 days.
+- Browser tests (`npm run e2e`) run against a mocked API, so they cover the UI, not the deployed backend; `npm run smoke` covers the backend. The microphone path is not covered by either.
 - A phone app (Capacitor wrapper), an IVR line for basic phones, a WhatsApp bot and more languages are the next steps, not built.

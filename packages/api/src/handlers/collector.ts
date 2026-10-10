@@ -90,7 +90,7 @@ export const acceptBatch = route(["collector"], async (c) => {
             Update: {
               TableName: TABLE(),
               Key: { PK: `BATCH#${b.id}`, SK: "META" },
-              UpdateExpression: "SET #s = :a",
+              UpdateExpression: "SET #s = :a REMOVE GSI1PK, GSI1SK",
               ConditionExpression: "#s = :as",
               ExpressionAttributeNames: { "#s": "status" },
               ExpressionAttributeValues: { ":a": "ACTIVE", ":as": "ASSIGNED" },

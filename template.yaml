@@ -148,14 +148,20 @@ Resources:
   DefineAuthFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref DefineAuthFnLogs
       Handler: customAuth.define
   CreateAuthFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CreateAuthFnLogs
       Handler: customAuth.create
   VerifyAuthFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref VerifyAuthFnLogs
       Handler: customAuth.verify
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
 
@@ -194,6 +200,8 @@ Resources:
   PostConfirmationFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref PostConfirmationFnLogs
       Handler: postConfirmation.handler
       Policies:
         - Statement:
@@ -240,6 +248,8 @@ Resources:
   CreateRequestFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CreateRequestFnLogs
       Handler: requests.createRequest
       Policies:
         - DynamoDBCrudPolicy: { TableName: !Ref Table }
@@ -250,6 +260,8 @@ Resources:
   ListMyRequestsFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref ListMyRequestsFnLogs
       Handler: requests.listMyRequests
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -258,6 +270,8 @@ Resources:
   GetRequestFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref GetRequestFnLogs
       Handler: requests.getRequest
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -266,6 +280,8 @@ Resources:
   CancelRequestFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CancelRequestFnLogs
       Handler: requests.cancelRequest
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -274,6 +290,8 @@ Resources:
   AckPickupFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref AckPickupFnLogs
       Handler: requests.ackPickup
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -282,6 +300,8 @@ Resources:
   CollectorTodayFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CollectorTodayFnLogs
       Handler: collector.collectorToday
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -290,6 +310,8 @@ Resources:
   AcceptBatchFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref AcceptBatchFnLogs
       Handler: collector.acceptBatch
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -298,6 +320,8 @@ Resources:
   MarkMissedFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref MarkMissedFnLogs
       Handler: collector.markMissed
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -306,6 +330,8 @@ Resources:
   ConfirmPickupFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref ConfirmPickupFnLogs
       Handler: collector.confirmPickup
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -314,6 +340,8 @@ Resources:
   UpsertCollectorFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref UpsertCollectorFnLogs
       Handler: collector.upsertCollector
       Policies: [{ DynamoDBCrudPolicy: { TableName: !Ref Table } }]
       Events:
@@ -322,6 +350,8 @@ Resources:
   ImpactFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref ImpactFnLogs
       Handler: impact.impact
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -330,6 +360,8 @@ Resources:
   DispatchFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref DispatchFnLogs
       Handler: dispatch.handler
       Timeout: 60
       MemorySize: 512
@@ -352,6 +384,8 @@ Resources:
   CreateCollectorFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CreateCollectorFnLogs
       Handler: admin.createCollector
       Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
       Policies:
@@ -366,6 +400,8 @@ Resources:
   ListCollectorsFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref ListCollectorsFnLogs
       Handler: admin.listCollectors
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -374,6 +410,8 @@ Resources:
   EnrollCollectorFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref EnrollCollectorFnLogs
       Handler: admin.enrollCollector
       Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
       Policies:
@@ -386,6 +424,8 @@ Resources:
   RevokeCollectorFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref RevokeCollectorFnLogs
       Handler: admin.revokeCollector
       Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
       Policies:
@@ -398,6 +438,8 @@ Resources:
   AdminLedgerFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref AdminLedgerFnLogs
       Handler: collector.adminLedger
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -406,6 +448,8 @@ Resources:
   CollectorLedgerFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref CollectorLedgerFnLogs
       Handler: collector.collectorLedger
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
@@ -415,6 +459,8 @@ Resources:
   AssistantFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref AssistantFnLogs
       Handler: assistant.assistant
       Timeout: 29
       MemorySize: 512
@@ -427,6 +473,8 @@ Resources:
   SpeakFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref SpeakFnLogs
       Handler: assistant.speakText
       Timeout: 15
       Policies:
@@ -438,6 +486,8 @@ Resources:
   PhotoEstimateFn:
     Type: AWS::Serverless::Function
     Properties:
+      LoggingConfig:
+        LogGroup: !Ref PhotoEstimateFnLogs
       Handler: assistant.estimatePhoto
       Timeout: 29
       Policies:
@@ -589,6 +639,132 @@ Resources:
       NotificationsWithSubscribers:
         - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE }
           Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+  # ---------- log retention ----------
+  DefineAuthFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CreateAuthFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  VerifyAuthFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  PostConfirmationFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CreateRequestFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ListMyRequestsFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  GetRequestFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CancelRequestFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AckPickupFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CollectorTodayFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AcceptBatchFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  MarkMissedFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ConfirmPickupFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  UpsertCollectorFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ImpactFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  DispatchFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CreateCollectorFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ListCollectorsFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  EnrollCollectorFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  RevokeCollectorFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AdminLedgerFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CollectorLedgerFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AssistantFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  SpeakFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  PhotoEstimateFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
 
 Outputs:
   ApiUrl: { Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/v1" }
