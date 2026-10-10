@@ -16,11 +16,20 @@ Parameters:
     Type: String
     Default: ap-south-1
     Description: Region used for Amazon Location Routes OptimizeWaypoints
+  GoogleClientId:
+    Type: String
+    Default: ""
+    Description: Google OAuth client id; leave empty to keep email-only login
+  GoogleClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
   MonthlyBudgetUsd:
     Type: Number
     Default: 10
 
 Conditions:
+  HasGoogle: !Not [!Equals [!Ref GoogleClientId, ""]]
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
 
 Globals:
@@ -127,10 +136,38 @@ Resources:
       GenerateSecret: false
       PreventUserExistenceErrors: ENABLED
       ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      SupportedIdentityProviders: !If [HasGoogle, [COGNITO, !Ref GoogleIdP], !Ref AWS::NoValue]
+      AllowedOAuthFlows: !If [HasGoogle, [code], !Ref AWS::NoValue]
+      AllowedOAuthFlowsUserPoolClient: !If [HasGoogle, true, !Ref AWS::NoValue]
+      AllowedOAuthScopes: !If [HasGoogle, [openid, email, profile], !Ref AWS::NoValue]
+      CallbackURLs: !If [HasGoogle, [!Sub "https://${SiteDistribution.DomainName}/auth/callback", "http://localhost:4173/auth/callback"], !Ref AWS::NoValue]
+      LogoutURLs: !If [HasGoogle, [!Sub "https://${SiteDistribution.DomainName}/", "http://localhost:4173/"], !Ref AWS::NoValue]
       AccessTokenValidity: 60
       IdTokenValidity: 60
       RefreshTokenValidity: 30
       TokenValidityUnits: { AccessToken: minutes, IdToken: minutes, RefreshToken: days }
+
+  # Optional Google sign-in: created only when a Google OAuth client id is supplied.
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Condition: HasGoogle
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub kabadi-connect-${AWS::AccountId}
+
+  GoogleIdP:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogle
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
 
   # Collectors sign in once with a QR card (custom auth) and stay signed in for years.
   CollectorClient:
@@ -241,6 +278,7 @@ Resources:
       MethodSettings:
         - { ResourcePath: "/*", HttpMethod: "*", ThrottlingBurstLimit: 50, ThrottlingRateLimit: 25, MetricsEnabled: true }
         - { ResourcePath: "/demo/start", HttpMethod: POST, ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 }
+        - { ResourcePath: "/public/impact", HttpMethod: GET, ThrottlingBurstLimit: 20, ThrottlingRateLimit: 5 }
       GatewayResponses:
         DEFAULT_4XX:
           ResponseParameters:
@@ -360,6 +398,18 @@ Resources:
       Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
       Events:
         Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /impact, Method: get } }
+
+  PublicImpactFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref PublicImpactFnLogs
+      Handler: impact.publicImpact
+      Policies: [{ DynamoDBReadPolicy: { TableName: !Ref Table } }]
+      Events:
+        Get:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /public/impact, Method: get, Auth: { Authorizer: NONE } }
 
   DispatchFn:
     Type: AWS::Serverless::Function
@@ -533,6 +583,7 @@ Resources:
               - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/in.anthropic.claude-haiku-4-5-20251001-v1:0
               - !Sub arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0
           - { Effect: Allow, Action: polly:SynthesizeSpeech, Resource: "*" }
+          - { Effect: Allow, Action: rekognition:DetectLabels, Resource: "*" }
           - { Effect: Allow, Action: transcribe:StartStreamTranscription, Resource: "*" }
           - Effect: Allow
             Action: ssm:GetParameters
@@ -639,6 +690,11 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref OpsTopic]
+
+  PublicImpactFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
 
   DemoStartFnLogs:
     Type: AWS::Logs::LogGroup
@@ -800,6 +856,8 @@ Outputs:
   UserPoolId: { Value: !Ref UserPool }
   UserPoolClientId: { Value: !Ref UserPoolClient }
   CollectorClientId: { Value: !Ref CollectorClient }
+  GoogleEnabled: { Value: !If [HasGoogle, "true", "false"] }
+  AuthDomain: { Value: !If [HasGoogle, !Sub "kabadi-connect-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com", ""] }
   TableName: { Value: !Ref Table }
   SiteBucketName: { Value: !Ref SiteBucket }
   DistributionId: { Value: !Ref SiteDistribution }

@@ -150,14 +150,14 @@ export const TOOLS = {
 
 const NUM: Record<string, number> = {
   एक: 1, ek: 1, दो: 2, do: 2, तीन: 3, teen: 3, चार: 4, char: 4, पाँच: 5, पांच: 5, paanch: 5, panch: 5, छह: 6, छः: 6, chhe: 6, chah: 6,
-  सात: 7, saat: 7, आठ: 8, aath: 8, नौ: 9, nau: 9, दस: 10, das: 10, ढाई: 2.5, dhai: 2.5, डेढ़: 1.5, डेढ: 1.5, dedh: 1.5,
+  सात: 7, saat: 7, आठ: 8, aath: 8, नौ: 9, nau: 9, दस: 10, das: 10, ग्यारह: 11, gyarah: 11, बारह: 12, barah: 12, पंद्रह: 15, pandrah: 15, बीस: 20, bees: 20, आधा: 0.5, aadha: 0.5, adha: 0.5, पाव: 0.25, paav: 0.25, pav: 0.25, ढाई: 2.5, dhai: 2.5, डेढ़: 1.5, डेढ: 1.5, dedh: 1.5,
 };
 const HALF = /^(साढ़े|साढे|साड़े|sade|saade|sadhe)$/;
 const MAT: [RegExp, Category][] = [
   [/^(कागज़|कागज|काग़ज़|अख़बार|अखबार|रद्दी|गत्ता|kagaz|raddi|gatta|akhbaar|akhbar|paper)$/, "paper"],
-  [/^(प्लास्टिक|बोतल|डिब्बा|plastic|botal|dibba)$/, "plastic"],
-  [/^(लोहा|लोहे|धातु|टीन|पीतल|स्टील|loha|lohe|dhatu|tin|steel|peetal|metal)$/, "metal"],
-  [/^(मोबाइल|चार्जर|ewaste|e-waste|mobile|charger|bijli)$/, "ewaste"],
+  [/^(प्लास्टिक|बोतल|बोतलें|डिब्बा|plastic|botal|botalein|dibba|dabba)$/, "plastic"],
+  [/^(लोहा|लोहे|धातु|टीन|पीतल|स्टील|सरिया|loha|lohe|dhatu|tin|steel|peetal|metal|sariya)$/, "metal"],
+  [/^(मोबाइल|चार्जर|तार|बैटरी|ewaste|e-waste|mobile|charger|bijli|taar|tar|battery)$/, "ewaste"],
   [/^(काँच|कांच|शीशा|kaanch|kanch|sheesha|glass)$/, "glass"],
 ];
 
@@ -167,22 +167,29 @@ export function parseWeights(text: string): { cat: Category; kg: number }[] {
   let num: number | undefined;
   let half = false;
   let lastMat: Category | undefined; // material heard before its number ("kagaz paanch kilo")
+  let lastSet: Category | undefined;
   for (const raw of text.toLowerCase().split(/[\s,।]+/).map((w) => w.replace(/\.+$/, "")).filter(Boolean)) {
     if (HALF.test(raw)) {
       half = true;
+      continue;
+    }
+    if (/^(gram|grams|ग्राम|gm)$/.test(raw)) {
+      // "500 gram kagaz" (number still pending) or "kagaz 500 gram" (already stored)
+      if (num !== undefined) num /= 1000;
+      else if (lastSet) out.set(lastSet, out.get(lastSet)! / 1000);
       continue;
     }
     const n = /^\d+(\.\d+)?$/.test(raw) ? Number(raw) : NUM[raw];
     if (n !== undefined) {
       const kg = n + (half ? 0.5 : 0);
       half = false;
-      if (lastMat) out.set(lastMat, kg), (lastMat = undefined);
+      if (lastMat) out.set(lastMat, kg), (lastSet = lastMat), (lastMat = undefined);
       else num = kg;
       continue;
     }
     const mat = MAT.find(([re]) => re.test(raw))?.[1];
     if (mat) {
-      if (num !== undefined) out.set(mat, num), (num = undefined);
+      if (num !== undefined) out.set(mat, num), (lastSet = mat), (num = undefined);
       else lastMat = mat;
     }
   }
@@ -197,12 +204,12 @@ export function ruleIntent(text: string): ToolCall | null {
     return { name: "confirm_pickup", input: { items: weights, segregation } };
   }
   const rules: [RegExp, string][] = [
-    [/(कोई नहीं|ghar par nahi|ghar pe nahi|koi nahi|बंद है|band hai|not home)/, "mark_not_home"],
-    [/(अगला|agla|agle|कहाँ जाना|kahan jana|next)/, "next_stop"],
-    [/(कितने|kitne|हिसाब|hisaab|hisab|summary)/, "today_summary"],
-    [/(शुरू|shuru|chalo|चलो|start)/, "start_batch"],
-    [/(फ़ोन|फोन|phone|call|कॉल)/, "call_household"],
-    [/(रास्ता|rasta|map|नक्शा|navigate)/, "navigate"],
+    [/(कोई नहीं|ghar par nahi|ghar pe nahi|koi nahi|बंद है|band hai|darwaza band|दरवाज़ा बंद|koi nahi mila|not home)/, "mark_not_home"],
+    [/(अगला|agla|agle|aage kahan|आगे कहाँ|कहाँ जाना|kahan jana|next)/, "next_stop"],
+    [/(कितने|kitne|kitna hua|कितना हुआ|kitna kamaya|कितना कमाया|हिसाब|hisaab|hisab|summary)/, "today_summary"],
+    [/(शुरू|shuru|chalo|चलो|start karo|start)/, "start_batch"],
+    [/(फ़ोन|फोन|phone|call karo|number lagao|नंबर लगाओ|call|कॉल)/, "call_household"],
+    [/(रास्ता|rasta|map dikhao|map|नक्शा|navigate)/, "navigate"],
   ];
   const hit = rules.find(([re]) => re.test(t));
   return hit ? { name: hit[1], input: {} } : null;

@@ -10,7 +10,7 @@ const out = Object.fromEntries(
   JSON.parse(aws("cloudformation", "describe-stacks", "--stack-name", stack, "--query", "Stacks[0].Outputs", "--output", "json")).map((o) => [o.OutputKey, o.OutputValue]),
 );
 const dist = "packages/web/dist";
-writeFileSync(`${dist}/config.json`, JSON.stringify({ apiUrl: out.ApiUrl, region, clientId: out.UserPoolClientId, collectorClientId: out.CollectorClientId }));
+writeFileSync(`${dist}/config.json`, JSON.stringify({ apiUrl: out.ApiUrl, region, clientId: out.UserPoolClientId, collectorClientId: out.CollectorClientId, googleEnabled: out.GoogleEnabled === "true", authDomain: out.AuthDomain || "" }));
 
 const bucket = `s3://${out.SiteBucketName}`;
 aws("s3", "sync", dist, bucket, "--delete", "--cache-control", "public,max-age=31536000,immutable");

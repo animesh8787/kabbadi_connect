@@ -3,8 +3,8 @@ import { batch, mockApi, signInAs, stop } from "./helpers";
 
 test("login page and public methodology page render without a session", async ({ page }) => {
   await mockApi(page, {});
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Kabadi Connect" })).toBeVisible();
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Sign in to Kabadi Connect" })).toBeVisible();
   await page.goto("/methodology");
   await expect(page.getByRole("heading", { name: "How we count impact" })).toBeVisible();
   await expect(page.getByRole("link", { name: /EPA WARM v16 management practices/ })).toBeVisible();
@@ -14,7 +14,8 @@ test("login page and public methodology page render without a session", async ({
 test("household schedules a pickup with the chosen materials and pin", async ({ page }) => {
   await signInAs(page, ["household"]);
   const calls = await mockApi(page, { "GET /requests": { requests: [] } });
-  await page.goto("/");
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Book", exact: true }).click();
   await page.getByRole("button", { name: /Paper/ }).click();
   await page.getByLabel("Address / landmark").fill("12 Main Road, Rohini");
   await page.locator(".map").click({ position: { x: 150, y: 120 } });
@@ -30,7 +31,8 @@ test("household schedules a pickup with the chosen materials and pin", async ({ 
 test("household cannot submit without a map pin", async ({ page }) => {
   await signInAs(page, ["household"]);
   const calls = await mockApi(page, { "GET /requests": { requests: [] } });
-  await page.goto("/");
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Book", exact: true }).click();
   await page.getByRole("button", { name: /Paper/ }).click();
   await page.getByLabel("Address / landmark").fill("12 Main Road");
   await page.getByRole("button", { name: "Schedule pickup" }).click();
@@ -41,7 +43,7 @@ test("household cannot submit without a map pin", async ({ page }) => {
 test("collector sees Hindi screen, rates segregation and confirms weights", async ({ page }) => {
   await signInAs(page, ["collector"]);
   const calls = await mockApi(page, { "GET /collector/batches/today": { batches: [batch()] } });
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.getByRole("heading", { name: "आज की पिकअप" })).toBeVisible();
   await expect(page.getByRole("button", { name: "दबाकर बोलिए" })).toBeVisible();
   await page.getByPlaceholder("किलो").fill("5");
@@ -56,7 +58,7 @@ test("collector starts a waiting batch", async ({ page }) => {
   const calls = await mockApi(page, {
     "GET /collector/batches/today": { batches: [batch({ status: "ASSIGNED" }, [stop({ status: "ASSIGNED" })])] },
   });
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByRole("button", { name: /शुरू करें/ }).click();
   await expect.poll(() => calls.some((c) => c.path === "/batches/b1/accept")).toBe(true);
 });
@@ -66,7 +68,7 @@ test("e-waste stop shows the authorised recyclers with map links", async ({ page
   await mockApi(page, {
     "GET /collector/batches/today": { batches: [batch({}, [stop({ items: [{ cat: "ewaste", bucket: "<2", estKg: 1 }] })])] },
   });
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.getByRole("heading", { name: /E-waste: authorised recyclers/ })).toBeVisible();
   await expect(page.getByText("M/s Muskan Technologies")).toBeVisible();
   const href = await page.getByRole("link", { name: "Open map" }).first().getAttribute("href");
@@ -78,7 +80,7 @@ test("admin dashboard shows impact tiles and the methodology link", async ({ pag
   await mockApi(page, {
     "GET /impact": { pickups: 7, kg: 84.5, co2Kg: 210, payout: 1300, kmSavedPct: 18, byCategory: { paper: 40, plastic: 20, metal: 10, ewaste: 4.5, glass: 10 }, daily: [], ackKg: 60, ackPickups: 5, segTotal: 4, segGood: 3 },
   });
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.getByText("84.5")).toBeVisible();
   await expect(page.getByText("75%")).toBeVisible(); // 3 of 4 well sorted
   await expect(page.getByRole("link", { name: "How we count impact" })).toBeVisible();
@@ -91,7 +93,7 @@ test("admin issues a new login card and sees a QR code", async ({ page }) => {
     "GET /admin/collectors": { collectors: [{ id: "c1", name: "Ramesh", phone: "9800000001", areas: ["ttng6"], lat: 28.7, lng: 77.1, active: true, cardActive: false }] },
     "POST /admin/collectors/c1/enroll": { id: "c1", username: "9800000001@collectors.kabadi.invalid", code: "abc123", validUntil: Date.now() + 86_400_000 },
   });
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByRole("button", { name: "Collectors" }).click();
   await expect(page.getByText("Ramesh")).toBeVisible();
   await page.getByRole("button", { name: /New card/ }).click();
@@ -128,4 +130,62 @@ test("judge page shows a friendly message when the daily demo cap is hit", async
   await page.goto("/judges");
   await page.getByRole("button", { name: "Start collector demo" }).click();
   await expect(page.getByRole("alert")).toContainText("busy today");
+});
+
+
+test("landing page shows live honest counters and routes to login or dashboard", async ({ page }) => {
+  await mockApi(page, { "GET /public/impact": { pickups: 12, kg: 140.5, co2Kg: 380, ackKg: 90, segTotal: 8, segGood: 6, kmSavedPct: 20 } });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your raddi,");
+  await expect(page.getByText("140.5")).toBeVisible();
+  await expect(page.getByText("75%")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in" }).first()).toHaveAttribute("href", "/login");
+  await page.getByRole("button", { name: "हिन्दी" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("आपकी रद्दी");
+});
+
+test("signed-in visitor sees the dashboard link and signed-out /app redirects to login", async ({ page }) => {
+  await mockApi(page, {});
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { name: "Sign in to Kabadi Connect" })).toBeVisible();
+  await signInAs(page, ["household"]);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Open dashboard" }).first()).toHaveAttribute("href", "/app");
+});
+
+test("household dashboard: next pickup tracker, impact, history receipt and rates", async ({ page }) => {
+  await signInAs(page, ["household"], "en");
+  const items = [{ cat: "paper", bucket: "2-5", estKg: 3.5 }];
+  await mockApi(page, {
+    "GET /requests": {
+      requests: [
+        { id: "a", status: "ASSIGNED", items, address: "12 Main Rd, Rohini", date: "2026-10-12", slot: "evening", estKg: 3.5 },
+        { id: "b", status: "PICKED", items, address: "5 Old St, Rohini", date: "2026-10-08", slot: "morning", estKg: 3.5, actual: [{ cat: "paper", kg: 6 }], payout: 72, co2Kg: 18, householdAck: true, segregation: "good" },
+      ],
+    },
+  });
+  await page.goto("/app");
+  await expect(page.getByText("12 Main Rd, Rohini")).toBeVisible();
+  await expect(page.getByText("Assigned", { exact: true })).toBeVisible();
+  await expect(page.getByText("₹72")).toBeVisible();
+  await expect(page.getByText("100%")).toBeVisible(); // sorting score
+  await page.getByRole("button", { name: "History" }).click();
+  await page.getByRole("button", { name: /Receipt/ }).click();
+  await expect(page.getByRole("heading", { name: /Receipt/ })).toBeVisible();
+  await expect(page.getByText("5 Old St, Rohini")).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("button", { name: "Rates & sorting" }).click();
+  await expect(page.getByText("Rates (₹ per kg)")).toBeVisible();
+  await expect(page.getByText("M/s Muskan Technologies")).toBeVisible();
+});
+
+test("Google button appears only when the stack enables it", async ({ page }) => {
+  await mockApi(page, {});
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toHaveCount(0);
+  await page.route("**/config.json", (r) =>
+    r.fulfill({ json: { apiUrl: "http://api.test/v1", region: "ap-south-1", clientId: "c", collectorClientId: "cc", googleEnabled: true, authDomain: "auth.example.com" } }),
+  );
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 });

@@ -1,12 +1,12 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { APIGatewayProxyResult } from "aws-lambda";
 import { CATEGORIES } from "@kc/shared";
 import { ddb, TABLE } from "../lib/ddb.js";
-import { route } from "../lib/http.js";
+import { json, route } from "../lib/http.js";
 import { istDate } from "../lib/time.js";
 
-/** Aggregated impact for the last N days (default 30), summed from daily counters. */
-export const impact = route(null, async (c) => {
-  const days = Math.min(Math.max(Number(c.event.queryStringParameters?.days ?? 30) || 30, 1), 365);
+/** Aggregated impact for the last N days, summed from daily counters. */
+export async function summarize(days: number) {
   const from = istDate(Date.now() - days * 24 * 3600 * 1000);
   const res = await ddb.send(
     new QueryCommand({
@@ -36,4 +36,22 @@ export const impact = route(null, async (c) => {
     byCategory: Object.fromEntries(CATEGORIES.map((k) => [k, sum(`kg_${k}`)])),
     daily: rows.map((r) => ({ date: r.SK, kg: Number(r.kg) || 0, pickups: Number(r.pickups) || 0 })),
   };
+}
+
+export const impact = route(null, async (c) => {
+  const days = Math.min(Math.max(Number(c.event.queryStringParameters?.days ?? 30) || 30, 1), 365);
+  return summarize(days);
 });
+
+/** Public landing-page counters: totals only (no per-day rows, no money), cached for a minute. */
+export const publicImpact = async (): Promise<APIGatewayProxyResult> => {
+  try {
+    const d = await summarize(365);
+    const res = json(200, { pickups: d.pickups, kg: d.kg, co2Kg: d.co2Kg, ackKg: d.ackKg, segTotal: d.segTotal, segGood: d.segGood, kmSavedPct: d.kmSavedPct });
+    res.headers = { ...res.headers, "cache-control": "public, max-age=60" };
+    return res;
+  } catch (e) {
+    console.error(JSON.stringify({ level: "error", msg: "public impact failed", reason: (e as Error).message }));
+    return json(500, { error: "internal error" });
+  }
+};

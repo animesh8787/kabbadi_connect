@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { current, loadConfig, signInWithCard, signOut, type Session } from "./auth";
+import { current, finishGoogle, loadConfig, signInWithCard, signOut, type Session } from "./auth";
 import { Admin } from "./Admin";
 import { Collector } from "./Collector";
 import { Collectors } from "./Collectors";
-import { Household } from "./Household";
+import { Household } from "./Dashboard";
 import { Judges } from "./Judges";
+import { Landing } from "./Landing";
 import { LangCtx, useT, type Lang } from "./i18n";
 import { Login } from "./Login";
 import { Methodology } from "./Methodology";
@@ -30,7 +31,9 @@ function Home({ session, onOut, lang, setLang }: { session: Session; onOut: () =
   return (
     <>
       <header className="bar-top no-print">
-        <strong>♻ {t("app")}</strong>
+        <a href="/" style={{ color: "inherit", textDecoration: "none" }}>
+          <strong>♻ {t("app")}</strong>
+        </a>
         <span>
           <button className="link" onClick={() => setLang(lang === "en" ? "hi" : "en")}>
             {t("language")}
@@ -66,6 +69,7 @@ async function cardSignIn(): Promise<Session | null> {
   return signInWithCard(user, code);
 }
 let cardAttempt: Promise<Session | null> | undefined;
+let cardFailed = false;
 
 export function App() {
   if (location.pathname === "/methodology") return <Methodology />;
@@ -76,6 +80,7 @@ function Main() {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [cardError, setCardError] = useState(false);
+  const [path, setPath] = useState(location.pathname);
   const [session, setSession] = useState<Session | null>(current());
   const [lang, setLangState] = useState<Lang>(() => {
     try {
@@ -93,33 +98,66 @@ function Main() {
     }
     document.documentElement.lang = l;
   };
+  const go = (to: string) => {
+    history.pushState(null, "", to);
+    setPath(to);
+  };
 
   useEffect(() => {
     (async () => {
       await loadConfig();
       // One attempt per page load (React may run effects twice); the code is single use.
-      cardAttempt ??= cardSignIn().catch(() => (setCardError(true), null));
+      cardAttempt ??= cardSignIn().catch(() => ((cardFailed = true), null));
       const s = await cardAttempt;
       if (s) {
         setLang("hi");
         setSession(s);
+        history.replaceState(null, "", "/app");
+        setPath("/app");
+      } else if (cardFailed) {
+        setCardError(true);
+        go("/login");
+      } else if (location.pathname === "/auth/callback") {
+        try {
+          setSession(await finishGoogle());
+          go("/app");
+        } catch {
+          setCardError(true);
+          go("/login");
+        }
       }
       setReady(true);
     })().catch(() => setFailed(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const back = () => setPath(location.pathname);
+    window.addEventListener("popstate", back);
+    return () => window.removeEventListener("popstate", back);
+  }, []);
+
+  // Signed-out visitors to the app go to the login; signed-in visitors skip it.
+  const route = path === "/app" && !session ? "/login" : path === "/login" && session ? "/app" : path;
+
   return (
     <LangCtx.Provider value={{ lang, setLang }}>
       {failed ? (
         <p className="error">Cannot load app configuration.</p>
-      ) : !ready ? null : session ? (
-        <Home session={session} lang={lang} setLang={setLang} onOut={() => (signOut(), setSession(null))} />
-      ) : (
+      ) : !ready ? null : route === "/app" && session ? (
+        <Home session={session} lang={lang} setLang={setLang} onOut={() => (signOut(), setSession(null), go("/"))} />
+      ) : route === "/login" ? (
         <>
           {cardError && <CardError />}
-          <Login onDone={(s) => setSession(s)} />
+          <Login
+            onDone={(s) => {
+              setSession(s);
+              go("/app");
+            }}
+          />
         </>
+      ) : (
+        <Landing session={session} />
       )}
     </LangCtx.Provider>
   );

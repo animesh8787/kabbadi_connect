@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ItemsSchema } from "@kc/shared";
 import { toolCall } from "../lib/bedrock.js";
+import { labelItems } from "../lib/labels.js";
 import { HttpError, route } from "../lib/http.js";
 import { focusStop, planReply, ruleIntent, SYSTEM, TOOLS, UNCLEAR } from "../lib/intent.js";
 import { takeQuota } from "../lib/quota.js";
@@ -90,50 +91,65 @@ const PHOTO_PROMPT = `Look at this photo of household recyclable waste in India.
 export const estimatePhoto = route(["household", "admin"], async (c) => {
   const { image } = c.body(z.object({ image: z.string().max(3_000_000) }));
   await takeQuota(c.sub, "photo", 20);
-  const call = await toolCall({
-    messages: [
-      {
-        role: "user",
-        content: [{ image: { format: "jpeg", source: { bytes: Buffer.from(image, "base64") } } }, { text: PHOTO_PROMPT }],
-      },
-    ],
-    toolConfig: {
-      tools: [
+  const bytes = Buffer.from(image, "base64");
+  let items: unknown;
+  let note = "";
+  let via = "model";
+  try {
+    const call = await toolCall({
+      messages: [
         {
-          toolSpec: {
-            name: "report",
-            description: "Materials seen with rough weight buckets",
-            inputSchema: {
-              json: {
-                type: "object",
-                properties: {
-                  items: {
-                    type: "array",
+          role: "user",
+          content: [{ image: { format: "jpeg", source: { bytes } } }, { text: PHOTO_PROMPT }],
+        },
+      ],
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: "report",
+              description: "Materials seen with rough weight buckets",
+              inputSchema: {
+                json: {
+                  type: "object",
+                  properties: {
                     items: {
-                      type: "object",
-                      properties: {
-                        cat: { type: "string", enum: ["paper", "plastic", "metal", "ewaste", "glass"] },
-                        bucket: { type: "string", enum: ["<2", "2-5", "5-10", "10+"] },
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          cat: { type: "string", enum: ["paper", "plastic", "metal", "ewaste", "glass"] },
+                          bucket: { type: "string", enum: ["<2", "2-5", "5-10", "10+"] },
+                        },
+                        required: ["cat", "bucket"],
                       },
-                      required: ["cat", "bucket"],
                     },
+                    note: { type: "string" },
                   },
-                  note: { type: "string" },
+                  required: ["items"],
                 },
-                required: ["items"],
               },
             },
           },
-        },
-      ],
-      toolChoice: { tool: { name: "report" } },
-    } as any,
-    inferenceConfig: { maxTokens: 400, temperature: 0 },
-  }).catch((e) => {
-    console.error(JSON.stringify({ level: "error", msg: "photo model failed", reason: (e as Error).message }));
-    throw new HttpError(503, "photo estimate temporarily unavailable");
-  });
-  const parsed = ItemsSchema.safeParse(call?.input.items);
+        ],
+        toolChoice: { tool: { name: "report" } },
+      } as any,
+      inferenceConfig: { maxTokens: 400, temperature: 0 },
+    });
+    items = call?.input.items;
+    note = typeof call?.input.note === "string" ? call.input.note.slice(0, 200) : "";
+  } catch (e) {
+    // Model unavailable (access, throttling): fall back to image labels.
+    console.error(JSON.stringify({ level: "error", msg: "photo model failed, using rekognition", reason: (e as Error).message }));
+    via = "rekognition";
+    items = await labelItems(bytes).catch((e2) => {
+      console.error(JSON.stringify({ level: "error", msg: "rekognition failed", reason: (e2 as Error).message }));
+      throw new HttpError(503, "photo estimate temporarily unavailable");
+    });
+    note = "Recognised from photo labels. Please check the weights.";
+  }
+  console.log(JSON.stringify({ level: "info", msg: "photo", via }));
+  const parsed = ItemsSchema.safeParse(items);
   if (!parsed.success) throw new HttpError(422, "could not recognise recyclables in this photo");
-  return { items: parsed.data, note: typeof call?.input.note === "string" ? call.input.note.slice(0, 200) : "" };
+  return { items: parsed.data, note };
 });

@@ -5,10 +5,10 @@ import { MapView } from "./MapView";
 import { useT } from "./i18n";
 
 const BUCKETS = Object.keys(WEIGHT_BUCKETS) as WeightBucket[];
-const EMOJI: Record<Category, string> = { paper: "📰", plastic: "🧴", metal: "🥫", ewaste: "🔌", glass: "🍾" };
+export const EMOJI: Record<Category, string> = { paper: "📰", plastic: "🧴", metal: "🥫", ewaste: "🔌", glass: "🍾" };
 const ymd = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-function NewPickup({ onCreated }: { onCreated: () => void }) {
+export function NewPickup({ onCreated }: { onCreated: () => void }) {
   const t = useT();
   const [picked, setPicked] = useState<Partial<Record<Category, WeightBucket>>>({});
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
@@ -149,48 +149,3 @@ function NewPickup({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-export function Household() {
-  const t = useT();
-  const [list, setList] = useState<Req[] | null>(null);
-  const load = useCallback(() => api.mine().then((r) => setList(r.requests)).catch(() => setList((l) => l ?? [])), []);
-
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 20_000);
-    return () => clearInterval(id);
-  }, [load]);
-
-  return (
-    <>
-      <NewPickup onCreated={load} />
-      <section className="card">
-        <h2>{t("myPickups")}</h2>
-        {list === null ? <p>{t("loading")}</p> : list.length === 0 ? <p className="muted">{t("none")}</p> : null}
-        <ul className="list">
-          {list?.map((r) => (
-            <li key={r.id}>
-              <div>
-                <strong>{r.items.map((i) => EMOJI[i.cat]).join(" ")}</strong> {r.address}
-                <div className="muted">
-                  {r.date} · {t(r.slot as "morning" | "evening")}
-                </div>
-                <span className={"badge " + r.status}>{t(r.status)}</span>
-                {r.status === "PICKED" && r.actual && (
-                  <div>
-                    {r.actual.map((a) => `${EMOJI[a.cat]} ${a.kg} ${t("kg")}`).join(" · ")} — <strong>₹{r.payout}</strong>
-                    {r.segregation && <span> · {r.segregation === "good" ? `👍 ${t("seg_good")}` : `👎 ${t("seg_mixed")}`}</span>}
-                  </div>
-                )}
-              </div>
-              {(r.status === "OPEN" || r.status === "ASSIGNED") && (
-                <button onClick={() => api.cancel(r.id).then(load)}>{t("cancel")}</button>
-              )}
-              {r.status === "PICKED" &&
-                (r.householdAck ? <span className="muted">✓ {t("acked")}</span> : <button onClick={() => api.ack(r.id).then(load)}>{t("ack")}</button>)}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </>
-  );
-}

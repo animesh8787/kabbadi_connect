@@ -5,6 +5,7 @@ import { DynamoDBDocumentClient, GetCommand, QueryCommand, UpdateCommand } from 
 import { create, define, hashCode, verify } from "../src/handlers/customAuth.js";
 import { buildLedger } from "../src/handlers/collector.js";
 import { focusStop, parseWeights, planReply, ruleIntent, type BatchView } from "../src/lib/intent.js";
+import { itemsFromLabels } from "../src/lib/labels.js";
 import { pcmOf } from "../src/lib/speech.js";
 import { takeQuota } from "../src/lib/quota.js";
 
@@ -139,5 +140,42 @@ describe("keyword fallback", () => {
     expect(ruleIntent("rasta batao")?.name).toBe("navigate");
     expect(ruleIntent("blah blah")).toBeNull();
     expect(ruleIntent("5 kilo kagaz achha alag tha")).toEqual({ name: "confirm_pickup", input: { items: [{ cat: "paper", kg: 5 }], segregation: "good" } });
+  });
+});
+
+describe("wider keyword coverage", () => {
+  it("handles more number words, grams and kabaad words", () => {
+    expect(parseWeights("pandrah kilo botalein")).toEqual([{ cat: "plastic", kg: 15 }]);
+    expect(parseWeights("aadha kilo taar")).toEqual([{ cat: "ewaste", kg: 0.5 }]);
+    expect(parseWeights("500 gram kagaz")).toEqual([{ cat: "paper", kg: 0.5 }]);
+    expect(parseWeights("sariya 250 gram")).toEqual([{ cat: "metal", kg: 0.25 }]);
+    expect(parseWeights("paav kilo battery")).toEqual([{ cat: "ewaste", kg: 0.25 }]);
+  });
+  it("hears more phrasings of each intent", () => {
+    const name = (s: string) => ruleIntent(s)?.name;
+    expect(name("aage kahan jana hai")).toBe("next_stop");
+    expect(name("aaj kitna kamaya")).toBe("today_summary");
+    expect(name("kitna hua")).toBe("today_summary");
+    expect(name("start karo")).toBe("start_batch");
+    expect(name("darwaza band hai")).toBe("mark_not_home");
+    expect(name("number lagao")).toBe("call_household");
+    expect(name("map dikhao")).toBe("navigate");
+  });
+});
+
+describe("photo label fallback", () => {
+  it("maps Rekognition labels and their parents to materials, one bucket each", () => {
+    const items = itemsFromLabels([
+      { Name: "Newspaper" },
+      { Name: "Water Bottle", Parents: [{ Name: "Bottle" }] },
+      { Name: "Laptop" },
+      { Name: "House" },
+    ]);
+    expect(items).toEqual([
+      { cat: "paper", bucket: "2-5" },
+      { cat: "plastic", bucket: "2-5" },
+      { cat: "ewaste", bucket: "2-5" },
+    ]);
+    expect(itemsFromLabels([{ Name: "Sky" }, { Name: "Tree" }])).toEqual([]);
   });
 });

@@ -11,6 +11,8 @@ export interface Config {
   region: string;
   clientId: string;
   collectorClientId: string;
+  googleEnabled?: boolean;
+  authDomain?: string;
 }
 export interface Session {
   idToken: string;
@@ -31,6 +33,7 @@ export async function loadConfig(): Promise<Config> {
   return cfg;
 }
 export const apiUrl = () => cfg.apiUrl;
+export const googleEnabled = () => Boolean(cfg?.googleEnabled && cfg.authDomain);
 
 function parse(idToken: string, refreshToken: string, clientId: string): Session {
   const p = JSON.parse(atob(idToken.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/")));
@@ -114,4 +117,42 @@ export async function signInWithCard(username: string, code: string): Promise<Se
   const t = done.AuthenticationResult;
   if (!t?.IdToken || !t.RefreshToken) throw new Error("card rejected");
   return save(parse(t.IdToken, t.RefreshToken, cfg.collectorClientId));
+}
+
+// ---- Sign in with Google through the Cognito hosted domain (authorization code + PKCE) ----
+const b64url = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+export async function startGoogle() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)).buffer);
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)).buffer);
+  sessionStorage.setItem("kc.pkce", JSON.stringify({ verifier, state }));
+  const q = new URLSearchParams({
+    response_type: "code",
+    client_id: cfg.clientId,
+    redirect_uri: `${location.origin}/auth/callback`,
+    scope: "openid email profile",
+    identity_provider: "Google",
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state,
+  });
+  location.assign(`https://${cfg.authDomain}/oauth2/authorize?${q}`);
+}
+
+/** Finish the redirect: check state, trade the code for tokens, store the session. */
+export async function finishGoogle(): Promise<Session> {
+  const q = new URLSearchParams(location.search);
+  const saved = JSON.parse(sessionStorage.getItem("kc.pkce") ?? "null") as { verifier: string; state: string } | null;
+  sessionStorage.removeItem("kc.pkce");
+  const code = q.get("code");
+  if (!saved || !code || q.get("state") !== saved.state) throw new Error("sign-in was not completed");
+  const res = await fetch(`https://${cfg.authDomain}/oauth2/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "authorization_code", client_id: cfg.clientId, code, redirect_uri: `${location.origin}/auth/callback`, code_verifier: saved.verifier }),
+  });
+  const t = await res.json();
+  if (!res.ok || !t.id_token || !t.refresh_token) throw new Error("sign-in failed");
+  return save(parse(t.id_token, t.refresh_token, cfg.clientId));
 }
