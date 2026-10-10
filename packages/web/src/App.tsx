@@ -4,6 +4,7 @@ import { Admin } from "./Admin";
 import { Collector } from "./Collector";
 import { Collectors } from "./Collectors";
 import { Household } from "./Household";
+import { Judges } from "./Judges";
 import { LangCtx, useT, type Lang } from "./i18n";
 import { Login } from "./Login";
 import { Methodology } from "./Methodology";
@@ -67,7 +68,8 @@ async function cardSignIn(): Promise<Session | null> {
 let cardAttempt: Promise<Session | null> | undefined;
 
 export function App() {
-  return location.pathname === "/methodology" ? <Methodology /> : <Main />;
+  if (location.pathname === "/methodology") return <Methodology />;
+  return location.pathname === "/judges" ? <Judges /> : <Main />;
 }
 
 function Main() {

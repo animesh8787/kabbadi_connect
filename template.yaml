@@ -193,6 +193,9 @@ Resources:
   GroupCollector:
     Type: AWS::Cognito::UserPoolGroup
     Properties: { UserPoolId: !Ref UserPool, GroupName: collector }
+  GroupDemo:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties: { UserPoolId: !Ref UserPool, GroupName: demo }
   GroupAdmin:
     Type: AWS::Cognito::UserPoolGroup
     Properties: { UserPoolId: !Ref UserPool, GroupName: admin }
@@ -237,6 +240,7 @@ Resources:
             Identity: { Header: Authorization }
       MethodSettings:
         - { ResourcePath: "/*", HttpMethod: "*", ThrottlingBurstLimit: 50, ThrottlingRateLimit: 25, MetricsEnabled: true }
+        - { ResourcePath: "/demo/start", HttpMethod: POST, ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 }
       GatewayResponses:
         DEFAULT_4XX:
           ResponseParameters:
@@ -455,6 +459,26 @@ Resources:
       Events:
         Get: { Type: Api, Properties: { RestApiId: !Ref Api, Path: /collector/ledger, Method: get } }
 
+  # ---------- public judge demo ----------
+  DemoStartFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref DemoStartFnLogs
+      Handler: demo.handler
+      Timeout: 20
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - Effect: Allow
+              Action: [cognito-idp:AdminCreateUser, cognito-idp:AdminSetUserPassword, cognito-idp:AdminAddUserToGroup, cognito-idp:AdminGetUser, cognito-idp:AdminEnableUser]
+              Resource: !GetAtt UserPool.Arn
+      Events:
+        Post:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /demo/start, Method: post, Auth: { Authorizer: NONE } }
+
   # ---------- voice assistant + photo estimate ----------
   AssistantFn:
     Type: AWS::Serverless::Function
@@ -615,6 +639,11 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref OpsTopic]
+
+  DemoStartFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
 
   Dashboard:
     Type: AWS::CloudWatch::Dashboard

@@ -10,7 +10,7 @@ import {
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { CollectorSchema, PhoneSchema } from "@kc/shared";
+import { CollectorSchema, PhoneSchema, type CollectorInput } from "@kc/shared";
 import { ddb, TABLE } from "../lib/ddb.js";
 import { HttpError, route } from "../lib/http.js";
 import { hashCode } from "./customAuth.js";
@@ -43,9 +43,8 @@ async function issueCard(sub: string): Promise<{ username: string; code: string;
   return { username, code, validUntil };
 }
 
-/** Admin: create a collector (login + profile) and return the one-time QR card code. */
-export const createCollector = route(["admin"], async (c) => {
-  const b = c.body(CreateSchema);
+/** Create the Cognito login, group membership, profile and first card for a collector. */
+export async function provisionCollector(b: CollectorInput, extraGroups: string[] = []) {
   const digits = b.phone.replace(/\D/g, "").slice(-10);
   // Synthetic address: collectors never see or use email. .invalid is reserved and can never receive mail.
   const email = `${digits}@collectors.kabadi.invalid`;
@@ -68,10 +67,15 @@ export const createCollector = route(["admin"], async (c) => {
   await cognito.send(
     new AdminSetUserPasswordCommand({ UserPoolId: pool(), Username: sub, Password: `Kc-${randomBytes(18).toString("base64url")}9a`, Permanent: true }),
   );
-  await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool(), Username: sub, GroupName: "collector" }));
+  for (const g of ["collector", ...extraGroups]) {
+    await cognito.send(new AdminAddUserToGroupCommand({ UserPoolId: pool(), Username: sub, GroupName: g }));
+  }
   await saveCollector(sub, b);
   return { id: sub, ...(await issueCard(sub)) };
-});
+}
+
+/** Admin: create a collector (login + profile) and return the one-time QR card code. */
+export const createCollector = route(["admin"], async (c) => provisionCollector(c.body(CreateSchema)));
 
 export const listCollectors = route(["admin"], async () => {
   const res = await ddb.send(

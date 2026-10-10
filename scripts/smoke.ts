@@ -194,4 +194,25 @@ try {
 ok(blocked, "old card code stays dead after re-issue");
 ok(Boolean(await cardSignIn(collectorClientId, username, reissued.data.code)), "replacement card signs in");
 
+// ---------------- public judge demo (no login) ----------------
+console.log("\n-- judge demo --");
+const impactBefore = (await call(base, "GET", "/impact?days=30", admin)).data;
+const demo = await call(base, "POST", "/demo/start", "");
+ok(demo.status === 200 && demo.data.code, "anyone can start a demo without logging in");
+const demoToken = await cardSignIn(collectorClientId, demo.data.username, demo.data.code);
+const demoBatch = (await call(base, "GET", "/collector/batches/today", demoToken)).data.batches[0];
+ok(demoBatch?.stops.length === 3, "demo collector has a batch with 3 pickups");
+ok(demoBatch.stops.some((s: any) => s.items.some((i: any) => i.cat === "ewaste")), "one demo pickup is e-waste (shows the recycler card)");
+ok((await call(base, "POST", `/batches/${demoBatch.id}/accept`, demoToken)).status === 200, "demo batch started");
+const dStop = demoBatch.stops[0];
+ok((await call(base, "POST", `/requests/${dStop.id}/confirm`, demoToken, { items: [{ cat: dStop.items[0].cat, actualKg: 4 }], segregation: "good" })).data.status === "PICKED", "demo pickup confirmed");
+const dTurn = (await call(base, "POST", "/assistant", demoToken, { text: "agla ghar kahan hai" })).data;
+ok(dTurn.action?.type === "focus", `demo voice works: ${dTurn.say}`);
+ok((await call(base, "GET", "/admin/collectors", demoToken)).status === 403, "demo collector has no admin access");
+ok((await call(base, "GET", "/impact?days=30", admin)).data.kg === impactBefore.kg, "demo pickups do not change real impact totals");
+
+const mine = (await call(base, "GET", "/admin/collectors", admin)).data.collectors.find((c: any) => c.id === newId);
+ok((await retire(mine)).status === 200, "smoke collector retired");
+
+
 console.log("\nSMOKE PASSED");

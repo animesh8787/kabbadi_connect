@@ -205,8 +205,8 @@ export const confirmPickup = route(["collector"], async (c) => {
               },
             },
           },
-          add("IMPACT#ALL"),
-          add(`IMPACT#${r.gh5}`),
+          // Judge-demo pickups are kept out of the real impact totals.
+          ...(r.demo ? [add("IMPACT#DEMO")] : [add("IMPACT#ALL"), add(`IMPACT#${r.gh5}`)]),
         ],
       }),
     );

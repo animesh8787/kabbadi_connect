@@ -31,7 +31,7 @@ async function speak(text: string) {
 /** Voice turn: speech -> intent (Bedrock) -> Hindi reply + proposed action. The phone performs the action after "haan". */
 export const assistant = route(["collector"], async (c) => {
   const b = c.body(AssistantSchema);
-  await takeQuota(c.sub, "assistant", 200);
+  await takeQuota(c.sub, "assistant", c.groups.includes("demo") ? 30 : 200);
 
   let heard = b.text?.trim() ?? "";
   let sttProvider: string | undefined;
@@ -78,7 +78,7 @@ export const assistant = route(["collector"], async (c) => {
 /** Read any short text aloud (the Sunao buttons and fixed prompts). */
 export const speakText = route(["collector"], async (c) => {
   const { text } = c.body(z.object({ text: z.string().trim().min(1).max(300) }));
-  await takeQuota(c.sub, "assistant", 200);
+  await takeQuota(c.sub, "assistant", c.groups.includes("demo") ? 30 : 200);
   const spoken = await speak(text);
   if (!spoken) throw new HttpError(502, "speech unavailable");
   return { audio: spoken.audio, audioMime: spoken.mime };

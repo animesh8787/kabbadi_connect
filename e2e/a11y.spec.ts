@@ -37,3 +37,10 @@ test("collector screen is accessible", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "आज की पिकअप" })).toBeVisible();
   await check(page);
 });
+
+test("judge page is accessible", async ({ page }) => {
+  await mockApi(page, {});
+  await page.goto("/judges");
+  await expect(page.getByRole("heading", { name: "Try Kabadi Connect" })).toBeVisible();
+  await check(page);
+});

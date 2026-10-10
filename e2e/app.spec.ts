@@ -108,3 +108,24 @@ test("collector opens a QR card link and a bad code shows the Hindi-friendly err
   await expect(page.getByRole("alert").first()).toBeVisible();
   expect(page.url()).not.toContain("enroll="); // single-use code never stays in the address bar
 });
+
+test("judge page starts a demo and shows a scannable card, without any login", async ({ page }) => {
+  const calls = await mockApi(page, { "POST /demo/start": { username: "8123456789@collectors.kabadi.invalid", code: "democode", validUntil: Date.now() + 86_400_000 } });
+  await page.goto("/judges");
+  await expect(page.getByRole("heading", { name: "Try Kabadi Connect" })).toBeVisible();
+  await page.getByRole("button", { name: "Start collector demo" }).click();
+  await expect(page.getByAltText("QR code for the demo collector card")).toBeVisible();
+  const href = await page.getByRole("link", { name: "Open the collector app here" }).getAttribute("href");
+  expect(href).toContain("enroll=democode");
+  expect(calls.some((c) => c.method === "POST" && c.path === "/demo/start")).toBe(true);
+});
+
+test("judge page shows a friendly message when the daily demo cap is hit", async ({ page }) => {
+  await mockApi(page, {});
+  await page.route("**/v1/demo/start", (r) =>
+    r.fulfill({ status: 429, headers: { "access-control-allow-origin": "*" }, json: { error: "The demo is busy today, please try again tomorrow." } }),
+  );
+  await page.goto("/judges");
+  await page.getByRole("button", { name: "Start collector demo" }).click();
+  await expect(page.getByRole("alert")).toContainText("busy today");
+});
