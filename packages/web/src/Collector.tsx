@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CATEGORIES, ewaste, type Category } from "@kc/shared";
 import { api, ApiError, type Batch, type Stop } from "./api";
 import { Bolo } from "./Bolo";
+import { CollectorSettings, NearbyBoard } from "./CollectorExtras";
+import { Navigate } from "./Navigate";
 import { MapView } from "./MapView";
 import { useT } from "./i18n";
 import { play } from "./voice";
@@ -32,7 +34,7 @@ async function flush() {
   }
 }
 
-function StopCard({ stop, index, active, focused, reload }: { stop: Stop; index: number; active: boolean; focused: boolean; reload: () => void }) {
+function StopCard({ stop, index, active, focused, reload, onNavigate }: { stop: Stop; index: number; active: boolean; focused: boolean; reload: () => void; onNavigate: () => void }) {
   const t = useT();
   const [kg, setKg] = useState<Partial<Record<Category, string>>>({});
   const [seg, setSeg] = useState<"good" | "mixed" | undefined>();
@@ -71,9 +73,15 @@ function StopCard({ stop, index, active, focused, reload }: { stop: Stop; index:
           </div>
         </div>
       </div>
+      {stop.notes && (
+        <p className="muted">
+          📝 {t("note_label")}: {stop.notes}
+        </p>
+      )}
       <div className="actions">
-        <a className="btn" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=walking`} target="_blank" rel="noreferrer">
-          🧭 {t("navigate")}
+        <button onClick={onNavigate}>🧭 {t("nav_start")}</button>
+        <a className="btn" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=walking`} target="_blank" rel="noreferrer" aria-label={t("navigate")}>
+          🗺
         </a>
         {stop.phone && (
           <a className="btn" href={`tel:${stop.phone}`} aria-label="call">
@@ -154,7 +162,7 @@ function EwasteCard() {
   );
 }
 
-function BatchCard({ batch, focusId, reload }: { batch: Batch; focusId?: string; reload: () => void }) {
+function BatchCard({ batch, focusId, reload, onNavigate }: { batch: Batch; focusId?: string; reload: () => void; onNavigate: (s: Stop, i: number) => void }) {
   const t = useT();
   const live = batch.stops.filter((s) => s.status !== "CANCELLED");
   const [naive, setNaive] = useState(false);
@@ -194,7 +202,7 @@ function BatchCard({ batch, focusId, reload }: { batch: Batch; focusId?: string;
       )}
       <ol className="stops">
         {live.map((s, i) => (
-          <StopCard key={s.id} stop={s} index={i} active={batch.status === "ACTIVE"} focused={s.id === focusId} reload={reload} />
+          <StopCard key={s.id} stop={s} index={i} active={batch.status === "ACTIVE"} focused={s.id === focusId} reload={reload} onNavigate={() => onNavigate(s, i)} />
         ))}
       </ol>
     </section>
@@ -205,6 +213,8 @@ export function Collector() {
   const t = useT();
   const [batches, setBatches] = useState<Batch[] | null>(null);
   const [focusId, setFocusId] = useState<string | undefined>();
+  const [navTo, setNavTo] = useState<{ stop: Stop; index: number } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const load = useCallback(async () => {
     await flush();
     api.batches().then((r) => setBatches(r.batches)).catch(() => setBatches((b) => b ?? []));
@@ -226,17 +236,44 @@ export function Collector() {
   };
   const hasEwaste = batches?.some((b) => b.stops.some((s) => s.status !== "PICKED" && s.items.some((i) => i.cat === "ewaste")));
 
+  const openNav = (id: string) => {
+    const all = batches?.flatMap((b) => b.stops.filter((s) => s.status !== "CANCELLED")) ?? [];
+    const i = all.findIndex((s) => s.id === id);
+    if (i >= 0) setNavTo({ stop: all[i]!, index: i });
+  };
+
+  if (navTo) {
+    return (
+      <Navigate
+        stop={navTo.stop}
+        index={navTo.index}
+        onClose={() => setNavTo(null)}
+        onArrive={() => {
+          setFocusId(navTo.stop.id);
+          setNavTo(null);
+          setTimeout(() => document.getElementById(`stop-${navTo.stop.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+        }}
+      />
+    );
+  }
   return (
     <>
-      <h1>{t("today_batches")}</h1>
+      <h1>
+        {t("today_batches")}{" "}
+        <button className="link" onClick={() => setSettingsOpen(!settingsOpen)} aria-label={t("set_title")}>
+          ⚙
+        </button>
+      </h1>
+      {settingsOpen && <CollectorSettings onClose={() => setSettingsOpen(false)} />}
       {batches === null && <p>{t("loading")}</p>}
       {batches?.length === 0 && <p className="card muted">{t("noBatches")}</p>}
       {batches?.map((b) => (
-        <BatchCard key={b.id} batch={b} focusId={focusId} reload={load} />
+        <BatchCard key={b.id} batch={b} focusId={focusId} reload={load} onNavigate={(s, i) => setNavTo({ stop: s, index: i })} />
       ))}
+      <NearbyBoard onTaken={load} />
       {hasEwaste && <EwasteCard />}
       <div className="bolo-space" />
-      <Bolo batches={batches ?? []} focusId={focusId} onFocus={focus} reload={load} />
+      <Bolo focusId={focusId} onFocus={focus} reload={load} onNavigate={openNav} />
     </>
   );
 }

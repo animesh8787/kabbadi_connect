@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from "react";
+import { ApiError, submitJoin } from "./api";
 import { apiUrl, loadConfig, type Session } from "./auth";
 import { LangCtx, useT } from "./i18n";
 
@@ -12,6 +13,52 @@ interface PublicImpact {
 }
 
 const SERVICES = ["Lambda", "API Gateway", "DynamoDB", "SQS", "EventBridge", "Location Service", "Cognito", "S3 + CloudFront", "Polly", "Transcribe", "Rekognition", "Bedrock"];
+
+function JoinForm() {
+  const t = useT();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [area, setArea] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
+  const [msg, setMsg] = useState("");
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    setState("busy");
+    try {
+      await loadConfig();
+      await submitJoin({ name, phone, area });
+      setState("sent");
+    } catch (x) {
+      setMsg(x instanceof ApiError ? x.message : t("error"));
+      setState("error");
+    }
+  }
+  if (state === "sent") return <p role="status">{t("join_sent")}</p>;
+  return (
+    <form className="card" onSubmit={send}>
+      <label>
+        {t("name")}
+        <input required minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label>
+        {t("phoneNo")}
+        <input required type="tel" inputMode="tel" pattern="\+?\d{10,13}" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </label>
+      <label>
+        {t("join_area")}
+        <input required minLength={2} maxLength={80} value={area} onChange={(e) => setArea(e.target.value)} />
+      </label>
+      {state === "error" && (
+        <p className="error" role="alert">
+          {msg}
+        </p>
+      )}
+      <button className="primary" disabled={state === "busy"}>
+        {t("join_send")}
+      </button>
+    </form>
+  );
+}
 
 /** Public landing page: what it is, live honest counters, how it works. */
 export function Landing({ session }: { session: Session | null }) {
@@ -147,8 +194,14 @@ export function Landing({ session }: { session: Session | null }) {
           </a>
         </section>
 
-        <section className="section">
+        <section className="section" id="join">
           <span className="eyebrow">04</span>
+          <h2>{t("join_title")}</h2>
+          <JoinForm />
+        </section>
+
+        <section className="section">
+          <span className="eyebrow">05</span>
           <h2>{t("l_aws")}</h2>
           <div className="chips-row">
             {SERVICES.map((s) => (

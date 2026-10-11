@@ -92,3 +92,50 @@ export function yesNo(heard: string): "yes" | "no" | null {
   if (NO.test(t)) return "no";
   return YES.test(t) ? "yes" : null;
 }
+
+/**
+ * Record one utterance hands-free: wait for speech, stop after ~1.2 s of quiet (or 15 s), give up after 8 s of silence.
+ * Returns the 16 kHz WAV (base64) or null when nothing was said.
+ */
+export async function recordUntilSilence(shouldContinue: () => boolean = () => true): Promise<string | null> {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const buf = new Uint8Array(analyser.fftSize);
+  const rec = new MediaRecorder(stream);
+  const parts: Blob[] = [];
+  rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+  rec.start();
+  const started = Date.now();
+  let heardAt = 0;
+  let lastLoud = 0;
+  await new Promise<void>((resolve) => {
+    const tick = () => {
+      analyser.getByteTimeDomainData(buf);
+      let peak = 0;
+      for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+      const now = Date.now();
+      if (peak > 14) {
+        heardAt ||= now;
+        lastLoud = now;
+      }
+      const quietFor = now - lastLoud;
+      if (!shouldContinue() || (heardAt && quietFor > 1200) || now - started > 15_000 || (!heardAt && now - started > 8000)) return resolve();
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+  const stopped = new Promise<void>((r) => (rec.onstop = () => r()));
+  rec.stop();
+  await stopped;
+  stream.getTracks().forEach((t) => t.stop());
+  void ctx.close();
+  if (!heardAt) return null;
+  try {
+    return await toWav16k(await new Blob(parts, { type: rec.mimeType }).arrayBuffer());
+  } catch {
+    return null;
+  }
+}

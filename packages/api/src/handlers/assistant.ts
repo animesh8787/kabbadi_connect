@@ -3,10 +3,19 @@ import { ItemsSchema } from "@kc/shared";
 import { toolCall } from "../lib/bedrock.js";
 import { labelItems } from "../lib/labels.js";
 import { HttpError, route } from "../lib/http.js";
-import { focusStop, planReply, ruleIntent, SYSTEM, TOOLS, UNCLEAR } from "../lib/intent.js";
+import { COLLECTOR_TOOLS, collectorContext, focusStop, historyText, planReply, ruleIntent, SYSTEM, UNCLEAR } from "../lib/intent.js";
+import { chooseTool } from "../lib/llm.js";
 import { takeQuota } from "../lib/quota.js";
 import { synthesize, transcribe } from "../lib/speech.js";
-import { loadBatches } from "./collector.js";
+import { istDate } from "../lib/time.js";
+import { buildLedger, loadBatches } from "./collector.js";
+import { activeCollectors, covers, toCollector } from "../lib/collectors.js";
+import { queryAll, TABLE } from "../lib/ddb.js";
+
+export const HistorySchema = z
+  .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(300) }))
+  .max(12)
+  .optional();
 
 const AssistantSchema = z
   .object({
@@ -14,13 +23,16 @@ const AssistantSchema = z
     audio: z.string().max(1_400_000).optional(),
     text: z.string().max(300).optional(),
     focusStopId: z.string().max(64).optional(),
+    history: HistorySchema,
+    location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).optional(),
     // Yes/no answers are matched on the phone: just return the transcript, no model call.
     transcribeOnly: z.boolean().optional(),
   })
   .refine((b) => b.audio || b.text, "audio or text required");
 
 /** Spoken reply for a failed or empty turn must never block the buttons, so speech errors are non-fatal. */
-async function speak(text: string) {
+export async function speak(text: string) {
+  if (!text) return null;
   try {
     return await synthesize(text);
   } catch (e) {
@@ -29,7 +41,7 @@ async function speak(text: string) {
   }
 }
 
-/** Voice turn: speech -> intent (Bedrock) -> Hindi reply + proposed action. The phone performs the action after "haan". */
+/** Voice or typed turn: speech -> a tool call from the model (Bedrock, else Groq, else keyword rules) -> Hindi reply + proposed action. */
 export const assistant = route(["collector"], async (c) => {
   const b = c.body(AssistantSchema);
   await takeQuota(c.sub, "assistant", c.groups.includes("demo") ? 30 : 200);
@@ -51,30 +63,43 @@ export const assistant = route(["collector"], async (c) => {
   let plan = { say: UNCLEAR } as ReturnType<typeof planReply>;
   let intentVia: string | undefined;
   if (heard) {
+    const now = new Date();
     const batches = await loadBatches(c.sub);
-    const focus = focusStop(batches, b.focusStopId);
-    let via = "model";
-    let call;
-    try {
-      call = await toolCall({
-        system: [{ text: SYSTEM }],
-        messages: [{ role: "user", content: [{ text: `Current stop status: ${focus?.status ?? "none"}. Said: ${heard}` }] }],
-        toolConfig: TOOLS as any,
-        inferenceConfig: { maxTokens: 300, temperature: 0 },
-      });
-    } catch (e) {
-      // Model unavailable (access, throttling): keyword rules still cover the common phrases.
-      console.error(JSON.stringify({ level: "error", msg: "bedrock failed, using rules", reason: (e as Error).message }));
+    // Context is best-effort: a failed lookup must not stop the assistant from answering.
+    const [month, nearby] = await Promise.all([
+      buildLedger(c.sub, istDate(now.getTime()).slice(0, 7)).catch(() => undefined),
+      b.location ? countNearby(c.sub, b.location).catch(() => undefined) : Promise.resolve(undefined),
+    ]);
+    const ctx = collectorContext({
+      batches,
+      month: month && { kg: month.kg, payout: month.payout, pickups: month.pickups, verifiedPickups: month.verifiedPickups },
+      nearby,
+      now,
+    });
+    const hist = historyText(b.history);
+    const user = `CONTEXT:\n${ctx}\n\n${hist ? `CONVERSATION SO FAR:\n${hist}\n\n` : ""}USER SAID: ${heard}`;
+    const chosen = await chooseTool({ system: SYSTEM, user, tools: COLLECTOR_TOOLS, smart: true });
+    intentVia = chosen.via;
+    let call = chosen.call;
+    if (!call) {
       call = ruleIntent(heard);
-      via = "rules";
+      intentVia = "rules";
     }
     plan = planReply(call, batches, b.focusStopId);
-    intentVia = via;
   }
   const spoken = await speak(plan.say);
   console.log(JSON.stringify({ level: "info", msg: "assistant", stt: sttProvider, tts: spoken?.provider, via: intentVia, action: plan.action?.type }));
   return { heard, ...plan, via: intentVia, audio: spoken?.audio, audioMime: spoken?.mime };
 });
+
+/** How many unclaimed requests are within reach of the collector's current position (for "anything nearby?"). */
+async function countNearby(sub: string, at: { lat: number; lng: number }): Promise<number> {
+  const mine = (await activeCollectors()).find((x) => x.id === sub);
+  if (!mine) return 0;
+  const me = { ...toCollector(mine), lat: at.lat, lng: at.lng };
+  const open = await queryAll({ TableName: TABLE(), IndexName: "GSI1", KeyConditionExpression: "GSI1PK = :o", ExpressionAttributeValues: { ":o": "OPEN" } });
+  return open.filter((r) => !r.demo && covers(me, { lat: r.lat, lng: r.lng })).length;
+}
 
 /** Read any short text aloud (the Sunao buttons and fixed prompts). */
 export const speakText = route(["collector"], async (c) => {

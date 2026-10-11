@@ -16,11 +16,14 @@ const mk = (i: number, kg: number, startIn: number): OpenReq => ({
 const col = (id: string, areas = ["ttnfv"], active = true): Collector => ({ id, areas, active, lat: 28.6, lng: 77.2 });
 
 describe("planBatches", () => {
-  it("waits when light and the window is far away", () => {
-    expect(planBatches([mk(1, 3.5, 5 * HOUR)], [col("c1")], now)).toEqual([]);
+  it("waits when light and the slot is more than 12 hours away", () => {
+    expect(planBatches([mk(1, 3.5, 20 * HOUR)], [col("c1")], now)).toEqual([]);
+  });
+  it("offers a light pickup once its slot is within 12 hours", () => {
+    expect(planBatches([mk(1, 3.5, 5 * HOUR)], [col("c1")], now)).toHaveLength(1);
   });
   it("dispatches once total kg reaches the threshold", () => {
-    const plans = planBatches([mk(1, 7.5, 5 * HOUR), mk(2, 7.5, 5 * HOUR)], [col("c1")], now);
+    const plans = planBatches([mk(1, 7.5, 20 * HOUR), mk(2, 7.5, 20 * HOUR)], [col("c1")], now);
     expect(plans).toHaveLength(1);
     expect(plans[0]!.requestIds.sort()).toEqual(["r1", "r2"]);
   });
@@ -28,13 +31,21 @@ describe("planBatches", () => {
     expect(planBatches([mk(1, 1, 0.5 * HOUR)], [col("c1")], now)).toHaveLength(1);
   });
   it("splits more than 20 stops across batches and spreads load over collectors", () => {
-    const reqs = Array.from({ length: 45 }, (_, i) => mk(i, 7.5, 5 * HOUR));
+    const reqs = Array.from({ length: 45 }, (_, i) => mk(i, 7.5, 20 * HOUR));
     const plans = planBatches(reqs, [col("c1"), col("c2"), col("c3")], now);
     expect(plans.map((p) => p.requestIds.length).sort((a, b) => a - b)).toEqual([5, 20, 20]);
     expect(new Set(plans.map((p) => p.collectorId)).size).toBe(3);
   });
-  it("skips groups with no active collector in the area", () => {
-    expect(planBatches([mk(1, 20, 0)], [col("c1", ["other"]), col("c2", ["ttnfv"], false)], now)).toEqual([]);
+  it("skips groups with no active collector within reach", () => {
+    const far = { ...col("c1", ["other"]), lat: 30.9, lng: 75.8 }; // Ludhiana: outside the 8 km radius, other cell
+    expect(planBatches([mk(1, 20, 0)], [far, col("c2", ["ttnfv"], false)], now)).toEqual([]);
+  });
+  it("serves a request outside the listed map cells when it is inside the collector's radius", () => {
+    expect(planBatches([mk(1, 20, 0)], [col("c1", ["other"])], now)).toHaveLength(1);
+  });
+  it("respects a small radius", () => {
+    const tight = { ...col("c1", ["other"]), radiusKm: 0.1, lat: 28.7, lng: 77.2 };
+    expect(planBatches([mk(1, 20, 0)], [tight], now)).toEqual([]);
   });
 });
 

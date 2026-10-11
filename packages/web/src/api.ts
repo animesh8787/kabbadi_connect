@@ -1,4 +1,4 @@
-import type { Category, Confirm, CreateRequest } from "@kc/shared";
+import type { Category, Confirm, CreateRequest, Maneuver } from "@kc/shared";
 import { apiUrl, token } from "./auth";
 
 export class ApiError extends Error {
@@ -31,6 +31,9 @@ export interface Req {
   co2Kg?: number;
   householdAck?: boolean;
   segregation?: "good" | "mixed" | null;
+  notes?: string;
+  /** Collectors that could reach this address when it was booked (0 = nobody covers it yet). */
+  collectorsNearby?: number;
 }
 export interface Stop {
   id: string;
@@ -41,6 +44,7 @@ export interface Stop {
   items: Req["items"];
   estKg: number;
   phone?: string;
+  notes?: string;
   actual?: Req["actual"];
   payout?: number;
 }
@@ -80,6 +84,8 @@ export interface Collector {
   lng: number;
   active: boolean;
   cardActive: boolean;
+  serviceRadiusKm?: number;
+  travelMode?: "walking" | "cart" | "scooter";
 }
 export interface Card {
   id: string;
@@ -99,13 +105,51 @@ export interface Ledger {
   segregationGoodPct: number | null;
   rows: { date: string; kg: number; payout: number; verified: boolean }[];
 }
+export interface Nearby {
+  id: string;
+  items: Req["items"];
+  estKg: number;
+  date: string;
+  slot: string;
+  notes?: string;
+  distanceKm: number;
+}
+export interface Profile {
+  address: string;
+  lat: number;
+  lng: number;
+  phone?: string;
+}
+export interface RouteInfo {
+  line: [number, number][];
+  maneuvers: Maneuver[];
+  distanceM: number;
+  durationS: number;
+}
+export interface HAction {
+  type: "book" | "reschedule" | "cancel";
+  booking?: { items: { cat: Category; bucket: string }[]; date: string; slot: string; notes?: string };
+  id?: string;
+  date?: string;
+  slot?: string;
+}
+export interface HTurn {
+  heard: string;
+  say: string;
+  action?: HAction;
+  needsConfirm?: boolean;
+  via?: string;
+  audio?: string;
+  audioMime?: string;
+}
 export type Action =
   | { type: "focus"; stopId: string }
   | { type: "start"; batchId: string }
   | { type: "confirm"; stopId: string; items: { cat: Category; actualKg: number }[]; segregation?: "good" | "mixed" }
   | { type: "missed"; stopId: string }
   | { type: "call"; phone: string }
-  | { type: "navigate"; lat: number; lng: number };
+  | { type: "navigate"; lat: number; lng: number }
+  | { type: "next_turn" };
 export interface Turn {
   heard: string;
   say?: string;
@@ -128,10 +172,34 @@ export const api = {
   ledger: (month: string) => call<Ledger>("GET", `/collector/ledger?month=${month}`),
   adminLedger: (id: string, month: string) => call<Ledger>("GET", `/admin/collectors/${id}/ledger?month=${month}`),
   collectors: () => call<{ collectors: Collector[] }>("GET", "/admin/collectors"),
-  createCollector: (b: { name: string; phone: string; areas: string[]; lat: number; lng: number }) => call<Card>("POST", "/admin/collectors", b),
+  createCollector: (b: { name: string; phone: string; areas: string[]; lat: number; lng: number; password?: string }) => call<Card>("POST", "/admin/collectors", b),
   newCard: (id: string) => call<Card>("POST", `/admin/collectors/${id}/enroll`),
   revoke: (id: string) => call("POST", `/admin/collectors/${id}/revoke`),
-  assistant: (b: { audio?: string; text?: string; focusStopId?: string; transcribeOnly?: boolean }) => call<Turn>("POST", "/assistant", b),
+  assistant: (b: { audio?: string; text?: string; focusStopId?: string; transcribeOnly?: boolean; history?: { role: "user" | "assistant"; text: string }[]; location?: { lat: number; lng: number } }) =>
+    call<Turn>("POST", "/assistant", b),
+  householdAssistant: (b: { audio?: string; text?: string; speak?: boolean; history?: { role: "user" | "assistant"; text: string }[] }) => call<HTurn>("POST", "/household/assistant", b),
+  nearby: (pos?: { lat: number; lng: number }) => call<{ requests: Nearby[]; radiusKm: number }>("GET", `/collector/nearby${pos ? `?lat=${pos.lat}&lng=${pos.lng}` : ""}`),
+  claim: (id: string) => call<{ batchId: string }>("POST", `/collector/nearby/${id}/claim`),
+  settings: (b: { travelMode?: "walking" | "cart" | "scooter"; serviceRadiusKm?: number }) => call("PUT", "/collector/settings", b),
+  position: (b: { lat: number; lng: number; stopId?: string }) => call("POST", "/collector/position", b),
+  eta: (id: string) => call<{ eta: { distanceKm: number; minutes: number } | null }>("GET", `/requests/${id}/eta`),
+  route: (stopId: string, pos: { lat: number; lng: number }) => call<RouteInfo>("GET", `/collector/route?stopId=${stopId}&lat=${pos.lat}&lng=${pos.lng}`),
+  reschedule: (id: string, b: { date: string; slot: string }) => call("POST", `/requests/${id}/reschedule`, b),
+  profile: () => call<{ profile: Profile | null }>("GET", "/me/profile"),
+  saveProfile: (b: Profile) => call("PUT", "/me/profile", b),
+  setOwnPassword: (password: string) => call("POST", "/collector/password", { password }),
+  setCollectorPassword: (id: string, password: string) => call("POST", `/admin/collectors/${id}/password`, { password }),
+  unassigned: () => call<{ requests: (Nearby & { address: string; collectorsNearby: number })[] }>("GET", "/admin/unassigned"),
+  assign: (id: string, collectorId: string) => call<{ batchId: string; distanceKm: number }>("POST", `/admin/unassigned/${id}/assign`, { collectorId }),
+  joins: () => call<{ joins: { id: string; name: string; phone: string; area: string; createdAt: number }[] }>("GET", "/admin/joins"),
+  deleteJoin: (id: string) => call("DELETE", `/admin/joins/${id}`),
   speak: (text: string) => call<{ audio: string; audioMime: string }>("POST", "/speak", { text }),
   photo: (image: string) => call<{ items: { cat: Category; bucket: string }[]; note: string }>("POST", "/photo-estimate", { image }),
 };
+
+/** Landing-page "I want to join as a kabadiwala": no login, reviewed by an admin. */
+export async function submitJoin(b: { name: string; phone: string; area: string }): Promise<void> {
+  const { apiUrl } = await import("./auth");
+  const res = await fetch(`${apiUrl()}/public/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+  if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error ?? "request failed");
+}

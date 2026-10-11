@@ -29,7 +29,7 @@ function styleUrl(): string | StyleSpecification {
 }
 
 /** Amazon Location (MapLibre) map; numbered markers, optional tap-to-pick. Same props as the old Leaflet map. */
-export function MapView({ markers, pin, onPick, height = 240 }: { markers?: Marker[]; pin?: { lat: number; lng: number } | null; onPick?: (p: { lat: number; lng: number }) => void; height?: number }) {
+export function MapView({ markers, pin, onPick, height = 240, line, follow }: { markers?: Marker[]; pin?: { lat: number; lng: number } | null; onPick?: (p: { lat: number; lng: number }) => void; height?: number; line?: [number, number][]; follow?: boolean }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | undefined>(undefined);
   const drawn = useRef<maplibregl.Marker[]>([]);
@@ -69,7 +69,8 @@ export function MapView({ markers, pin, onPick, height = 240 }: { markers?: Mark
     };
   }, []);
 
-  const key = JSON.stringify([markers, pin]);
+  const fitted = useRef(false);
+  const key = JSON.stringify([markers, pin, line?.length, line?.[0]]);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
@@ -88,16 +89,22 @@ export function MapView({ markers, pin, onPick, height = 240 }: { markers?: Mark
         drawn.current.push(new maplibregl.Marker({ color: "#e8793d" }).setLngLat([pin.lng, pin.lat]).addTo(m));
         bounds.extend([pin.lng, pin.lat]);
       }
-      const line = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: (markers ?? []).map((k) => [k.lng, k.lat]) } } as const;
+      const path = line ?? (markers ?? []).map((k) => [k.lng, k.lat]);
+      const feature = { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: path } } as const;
       const src = m.getSource("route") as maplibregl.GeoJSONSource | undefined;
-      if (markers && markers.length > 1) {
-        if (src) src.setData(line);
+      if (path.length > 1) {
+        if (src) src.setData(feature);
         else {
-          m.addSource("route", { type: "geojson", data: line });
+          m.addSource("route", { type: "geojson", data: feature });
           m.addLayer({ id: "route", type: "line", source: "route", paint: { "line-color": "#3ecf8e", "line-width": 3, "line-opacity": 0.8 } });
         }
       } else if (src) src.setData({ type: "FeatureCollection", features: [] });
-      if (!bounds.isEmpty()) m.fitBounds(bounds, { padding: 30, maxZoom: 16, duration: 0 });
+      if (follow && pin) {
+        // Navigation: keep the position in view; only fit the whole route once.
+        if (!fitted.current && !bounds.isEmpty()) m.fitBounds(bounds, { padding: 40, maxZoom: 17, duration: 0 });
+        else m.easeTo({ center: [pin.lng, pin.lat], zoom: Math.max(m.getZoom(), 16), duration: 400 });
+        fitted.current = true;
+      } else if (!bounds.isEmpty()) m.fitBounds(bounds, { padding: 30, maxZoom: 16, duration: 0 });
     };
     if (m.isStyleLoaded()) draw();
     else m.once("load", draw);

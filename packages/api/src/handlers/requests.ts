@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { ConditionalCheckFailedException, TransactionCanceledException } from "@aws-sdk/client-dynamodb";
-import { CreateRequestSchema, estKg, geohash, WEIGHT_BUCKETS, windowId, windowStartMs } from "@kc/shared";
+import { CreateRequestSchema, estKg, geohash, RescheduleSchema, WEIGHT_BUCKETS, windowId, windowStartMs } from "@kc/shared";
+import { activeCollectors, covers, toCollector } from "../lib/collectors.js";
 import { ddb, NINETY_DAYS_S, TABLE } from "../lib/ddb.js";
 import { HttpError, route } from "../lib/http.js";
 import { istDate, windowEndMs } from "../lib/time.js";
@@ -23,6 +24,9 @@ export const publicView = (r: Item, viewer: { sub: string; admin: boolean }) => 
   date: r.date,
   slot: r.slot,
   estKg: r.estKg,
+  notes: r.notes,
+  // How many collectors could reach this address when it was booked; 0 means "no kabadiwala here yet".
+  collectorsNearby: r.collectorsNearby,
   createdAt: r.createdAt,
   ...(r.status === "PICKED" || r.status === "MISSED"
     ? { actual: r.actual, payout: r.payout, co2Kg: r.co2Kg, householdAck: !!r.householdAck, segregation: r.segregation }
@@ -58,6 +62,7 @@ export const createRequest = route(["household", "admin"], async (c) => {
 
   const id = randomUUID();
   const gh5 = geohash(b.lat, b.lng, 5);
+  const collectorsNearby = (await activeCollectors()).map(toCollector).filter((c) => covers(c, { lat: b.lat, lng: b.lng, gh5 })).length;
   const win = windowId(b.date, b.slot);
   const item = {
     PK: `REQ#${id}`,
@@ -72,6 +77,8 @@ export const createRequest = route(["household", "admin"], async (c) => {
     gh5,
     address: b.address,
     phone: b.phone,
+    notes: b.notes,
+    collectorsNearby,
     date: b.date,
     slot: b.slot,
     window: win,
@@ -171,4 +178,41 @@ export const ackPickup = route(["household", "admin"], async (c) => {
     throw e;
   }
   return { id, householdAck: true };
+});
+
+/** Move an OPEN or ASSIGNED pickup to a new date and slot. An assigned one is released from its batch and re-offered. */
+export const reschedule = route(["household", "admin"], async (c) => {
+  const id = c.param("id");
+  const b = c.body(RescheduleSchema);
+  const now = Date.now();
+  if (windowEndMs(b.date, b.slot) <= now) throw new HttpError(400, "that time window has already passed");
+  if (windowStartMs(b.date, b.slot) - now > 7 * 24 * 3600 * 1000) throw new HttpError(400, "too far ahead");
+  const r = await loadRequest(id);
+  if (r.userId !== c.sub && !c.groups.includes("admin")) throw new HttpError(404, "not found");
+  const start = windowStartMs(b.date, b.slot);
+  try {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE(),
+        Key: { PK: `REQ#${id}`, SK: "META" },
+        UpdateExpression:
+          "SET #s = :open, #d = :date, slot = :slot, #w = :win, windowStart = :start, GSI1PK = :open, GSI1SK = :k REMOVE batchId, collectorId",
+        ConditionExpression: "#s IN (:open, :asg)",
+        ExpressionAttributeNames: { "#s": "status", "#d": "date", "#w": "window" },
+        ExpressionAttributeValues: {
+          ":open": "OPEN",
+          ":asg": "ASSIGNED",
+          ":date": b.date,
+          ":slot": b.slot,
+          ":win": windowId(b.date, b.slot),
+          ":start": start,
+          ":k": `${start}#${r.gh5}#${id}`,
+        },
+      }),
+    );
+  } catch (e) {
+    if (e instanceof ConditionalCheckFailedException) throw new HttpError(409, "cannot reschedule this pickup");
+    throw e;
+  }
+  return { id, status: "OPEN", date: b.date, slot: b.slot };
 });

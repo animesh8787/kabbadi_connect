@@ -1,4 +1,5 @@
 import { BATCH_MAX_STOPS, BATCH_MIN_KG, haversineKm } from "@kc/shared";
+import { covers } from "./collectors.js";
 import type { Pt } from "./routing.js";
 
 export interface OpenReq extends Pt {
@@ -14,6 +15,8 @@ export interface Collector extends Pt {
   id: string;
   areas: string[];
   active: boolean;
+  /** Service radius around lat/lng; default applied by callers (see collectors.ts). */
+  radiusKm?: number;
 }
 export interface Plan {
   collectorId: string;
@@ -22,7 +25,8 @@ export interface Plan {
   requestIds: string[];
 }
 
-const DISPATCH_LEAD_MS = 60 * 60 * 1000;
+// A pickup is offered once its slot is within 12 hours, even if light, so same-day and next-morning bookings show up.
+const DISPATCH_LEAD_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Group open requests by cell+window; dispatch a group when it is heavy enough or its window is
@@ -41,7 +45,7 @@ export function planBatches(reqs: OpenReq[], collectors: Collector[], now: numbe
     const kg = g.reduce((s, r) => s + r.estKg, 0);
     if (kg < BATCH_MIN_KG && first.windowStart - now > DISPATCH_LEAD_MS) continue;
     const centre = { lat: g.reduce((s, r) => s + r.lat, 0) / g.length, lng: g.reduce((s, r) => s + r.lng, 0) / g.length };
-    const eligible = collectors.filter((c) => c.active && c.areas.includes(first.gh5) && !first.declined?.includes(c.id));
+    const eligible = collectors.filter((c) => c.active && covers(c, { ...centre, gh5: first.gh5 }) && !first.declined?.includes(c.id));
     if (!eligible.length) continue;
     // Distance-from-centre order keeps each chunk geographically compact.
     const sorted = [...g].sort((a, b) => haversineKm(centre, a) - haversineKm(centre, b));

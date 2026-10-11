@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { CATEGORIES, factors, ewaste, type Category } from "@kc/shared";
+import { CATEGORIES, factors, ewaste, slotLabel, type Category } from "@kc/shared";
 import { api, type Req } from "./api";
 import { EMOJI, NewPickup } from "./Household";
+import { HouseholdChat, type Booking } from "./HouseholdChat";
+import { Schedule, firstOpenSlot, istDay } from "./Schedule";
 import { useT, type Key } from "./i18n";
 
 const LIVE: Req["status"][] = ["OPEN", "ASSIGNED", "EN_ROUTE"];
 const STEP: Record<string, number> = { OPEN: 0, ASSIGNED: 1, EN_ROUTE: 2, PICKED: 3 };
 const kgOf = (r: Req) => (r.actual ?? []).reduce((s, a) => s + a.kg, 0);
 
-type Tab = "home" | "book" | "history" | "rates";
+type Tab = "home" | "ask" | "book" | "history" | "rates";
 
 /** Household area: next-pickup tracker, personal impact, booking, history with receipts, rates and sorting guide. */
 export function Household() {
@@ -16,6 +18,7 @@ export function Household() {
   const [tab, setTab] = useState<Tab>("home");
   const [list, setList] = useState<Req[] | null>(null);
   const [receipt, setReceipt] = useState<Req | null>(null);
+  const [prefill, setPrefill] = useState<Booking | undefined>();
   const load = useCallback(() => api.mine().then((r) => setList(r.requests)).catch(() => setList((l) => l ?? [])), []);
 
   useEffect(() => {
@@ -26,6 +29,7 @@ export function Household() {
 
   const tabs: [Tab, Key][] = [
     ["home", "d_home"],
+    ["ask", "ha_speak"],
     ["book", "d_book"],
     ["history", "d_hist"],
     ["rates", "d_rates"],
@@ -42,8 +46,18 @@ export function Household() {
         ))}
       </nav>
       {tab === "home" && <Home list={list} go={setTab} />}
+      {tab === "ask" && (
+        <HouseholdChat
+          onChanged={load}
+          onOpenForm={(b) => {
+            setPrefill(b);
+            setTab("book");
+          }}
+        />
+      )}
       {tab === "book" && (
         <NewPickup
+          initial={prefill}
           onCreated={() => {
             load();
             setTab("home");
@@ -79,7 +93,7 @@ function Home({ list, go }: { list: Req[] | null; go: (t: Tab) => void }) {
               {shown.items.map((i) => EMOJI[i.cat]).join(" ")} {shown.address}
             </h2>
             <div className="muted">
-              {shown.date} · {t(shown.slot as "morning" | "evening")}
+              {shown.date} · {slotLabel(shown.slot)}
             </div>
             <div className="steps" role="list">
               {labels.map((l, i) => (
@@ -88,6 +102,9 @@ function Home({ list, go }: { list: Req[] | null; go: (t: Tab) => void }) {
                 </div>
               ))}
             </div>
+            {shown.notes && <div className="muted">📝 {shown.notes}</div>}
+            {next?.status === "OPEN" && <p className="muted">{next.collectorsNearby === 0 ? t("wait_nobody") : t("wait_looking")}</p>}
+            {next?.status === "EN_ROUTE" && <Eta id={next.id} />}
             {!next && <span className="badge PICKED">{t("d_done")}</span>}
           </>
         ) : (
@@ -126,8 +143,41 @@ function Home({ list, go }: { list: Req[] | null; go: (t: Tab) => void }) {
   );
 }
 
+/** "On the way: about 1.2 km, 8 min", refreshed every 30 s while the kabadiwala heads to this pickup. */
+function Eta({ id }: { id: string }) {
+  const t = useT();
+  const [eta, setEta] = useState<{ distanceKm: number; minutes: number } | null>(null);
+  useEffect(() => {
+    const load = () => api.eta(id).then((r) => setEta(r.eta)).catch(() => {});
+    load();
+    const i = setInterval(load, 30_000);
+    return () => clearInterval(i);
+  }, [id]);
+  return <p className="eta">🚶 {t("eta_on")}{eta ? `: ~${eta.distanceKm} km, ~${eta.minutes} ${t("eta_min")}` : ""}</p>;
+}
+
+function ChangeTime({ r, onDone, onClose }: { r: Req; onDone: () => void; onClose: () => void }) {
+  const t = useT();
+  const [date, setDate] = useState(r.date >= istDay(Date.now()) ? r.date : istDay(Date.now()));
+  const [slot, setSlot] = useState<string>(r.slot);
+  const [err, setErr] = useState("");
+  return (
+    <div className="card">
+      <Schedule date={date} slot={slot} onChange={(d, s) => (setDate(d), setSlot(s))} />
+      {err && <p className="error" role="alert">{err}</p>}
+      <div className="actions">
+        <button className="primary" onClick={() => api.reschedule(r.id, { date, slot }).then(onDone).catch((e) => setErr(e.message || t("error")))}>
+          {t("reschedule")}
+        </button>
+        <button onClick={onClose}>{t("back")}</button>
+      </div>
+    </div>
+  );
+}
+
 function History({ list, reload, onReceipt }: { list: Req[] | null; reload: () => void; onReceipt: (r: Req) => void }) {
   const t = useT();
+  const [moving, setMoving] = useState<string | null>(null);
   return (
     <section className="card">
       <h2>{t("myPickups")}</h2>
@@ -138,7 +188,7 @@ function History({ list, reload, onReceipt }: { list: Req[] | null; reload: () =
             <div>
               <strong>{r.items.map((i) => EMOJI[i.cat]).join(" ")}</strong> {r.address}
               <div className="muted">
-                {r.date} · {t(r.slot as "morning" | "evening")}
+                {r.date} · {slotLabel(r.slot)}
               </div>
               <span className={"badge " + r.status}>{t(r.status)}</span>
               {r.status === "PICKED" && r.actual && (
@@ -149,7 +199,12 @@ function History({ list, reload, onReceipt }: { list: Req[] | null; reload: () =
               )}
             </div>
             <div className="stack">
-              {(r.status === "OPEN" || r.status === "ASSIGNED") && <button onClick={() => api.cancel(r.id).then(reload)}>{t("cancel")}</button>}
+              {(r.status === "OPEN" || r.status === "ASSIGNED") && (
+                <>
+                  <button onClick={() => setMoving(moving === r.id ? null : r.id)}>🕒 {t("reschedule")}</button>
+                  <button onClick={() => api.cancel(r.id).then(reload)}>{t("cancel")}</button>
+                </>
+              )}
               {r.status === "PICKED" && (
                 <>
                   {r.householdAck ? <span className="muted">✓ {t("acked")}</span> : <button onClick={() => api.ack(r.id).then(reload)}>{t("ack")}</button>}
@@ -157,6 +212,7 @@ function History({ list, reload, onReceipt }: { list: Req[] | null; reload: () =
                 </>
               )}
             </div>
+            {moving === r.id && <ChangeTime r={r} onDone={() => (setMoving(null), reload())} onClose={() => setMoving(null)} />}
           </li>
         ))}
       </ul>

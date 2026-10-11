@@ -1,6 +1,7 @@
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
 import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { StartStreamTranscriptionCommand, TranscribeStreamingClient } from "@aws-sdk/client-transcribe-streaming";
+import { secret } from "./secrets.js";
 
 /**
  * Hindi speech in/out. Bhashini (free, government) is tried first when its keys exist in SSM
@@ -13,7 +14,7 @@ const TIMEOUT_MS = 3000;
 
 export interface Transcript {
   text: string;
-  provider: "bhashini" | "transcribe";
+  provider: "bhashini" | "transcribe" | "groq";
 }
 export interface Spoken {
   audio: string; // base64
@@ -129,7 +130,32 @@ export async function transcribe(wav: Buffer): Promise<Transcript> {
       console.warn(JSON.stringify({ level: "warn", msg: "bhashini asr failed, using transcribe", reason: (e as Error).message }));
     }
   }
-  return { text: await awsTranscribe(wav), provider: "transcribe" };
+  try {
+    const text = await awsTranscribe(wav);
+    if (text) return { text, provider: "transcribe" };
+  } catch (e) {
+    console.warn(JSON.stringify({ level: "warn", msg: "transcribe failed", reason: (e as Error).message }));
+  }
+  return { text: await groqTranscribe(wav), provider: "groq" };
+}
+
+/** Free Whisper on Groq, used only when Transcribe fails or hears nothing. Needs /kabadi/groq/apiKey in SSM. */
+async function groqTranscribe(wav: Buffer): Promise<string> {
+  const key = await secret("/kabadi/groq/apiKey");
+  if (!key) return "";
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "clip.wav");
+  form.append("model", "whisper-large-v3");
+  form.append("language", "hi");
+  form.append("temperature", "0");
+  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}` },
+    body: form,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`groq whisper ${res.status}`);
+  return String(((await res.json()) as any).text ?? "").trim();
 }
 
 export async function synthesize(text: string): Promise<Spoken> {

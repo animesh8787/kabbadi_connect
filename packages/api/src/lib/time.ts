@@ -7,3 +7,7 @@ export const istDate = (ms: number) => new Date(ms + IST_MS).toISOString().slice
 export function windowEndMs(date: string, slot: Slot): number {
   return Date.parse(`${date}T${String(SLOTS[slot][1]).padStart(2, "0")}:00:00+05:30`);
 }
+
+/** Calendar date (IST) n days after the given YYYY-MM-DD. */
+export const addDays = (date: string, n: number) => istDate(Date.parse(`${date}T12:00:00+05:30`) + n * 86_400_000);
+export const weekday = (date: string) => new Date(`${date}T12:00:00+05:30`).toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });

@@ -4,7 +4,7 @@ import { rmSync } from "node:fs";
 
 rmSync("packages/api/dist", { recursive: true, force: true });
 await build({
-  entryPoints: ["requests", "collector", "impact", "dispatch", "postConfirmation", "admin", "assistant", "customAuth", "demo"].map((n) => `packages/api/src/handlers/${n}.ts`),
+  entryPoints: ["requests", "collector", "impact", "dispatch", "postConfirmation", "admin", "assistant", "customAuth", "demo", "board", "profile", "hassistant", "nav"].map((n) => `packages/api/src/handlers/${n}.ts`),
   outdir: "packages/api/dist",
   outExtension: { ".js": ".mjs" },
   bundle: true,

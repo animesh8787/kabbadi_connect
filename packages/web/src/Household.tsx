@@ -1,24 +1,45 @@
 import { useCallback, useEffect, useState } from "react";
-import { CATEGORIES, estKg, payout, type Category, type WeightBucket, WEIGHT_BUCKETS } from "@kc/shared";
+import { CATEGORIES, estKg, payout, type Category, type Slot, type WeightBucket, WEIGHT_BUCKETS } from "@kc/shared";
 import { api, ApiError, type Req } from "./api";
 import { MapView } from "./MapView";
+import { firstOpenSlot, istDay, Schedule } from "./Schedule";
 import { useT } from "./i18n";
 
 const BUCKETS = Object.keys(WEIGHT_BUCKETS) as WeightBucket[];
 export const EMOJI: Record<Category, string> = { paper: "📰", plastic: "🧴", metal: "🥫", ewaste: "🔌", glass: "🍾" };
-const ymd = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-export function NewPickup({ onCreated }: { onCreated: () => void }) {
+export function NewPickup({ onCreated, initial }: { onCreated: () => void; initial?: { items: { cat: string; bucket: string }[]; date: string; slot: string; notes?: string } }) {
   const t = useT();
   const [picked, setPicked] = useState<Partial<Record<Category, WeightBucket>>>({});
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [day, setDay] = useState<0 | 1>(0);
-  const [slot, setSlot] = useState<"morning" | "evening">("evening");
+  const [date, setDate] = useState(() => istDay(Date.now()));
+  const [slot, setSlot] = useState<Slot>(() => firstOpenSlot(istDay(Date.now())) ?? "s1012");
+  const [notes, setNotes] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+
+  // A booking the assistant proposed: fill the form and let the person place the pin.
+  useEffect(() => {
+    if (!initial) return;
+    setPicked(Object.fromEntries(initial.items.map((i) => [i.cat, i.bucket])) as Partial<Record<Category, WeightBucket>>);
+    setDate(initial.date);
+    setSlot(initial.slot as Slot);
+    setNotes(initial.notes ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Saved address, pin and phone from the last booking: two taps next time.
+  useEffect(() => {
+    api.profile().then(({ profile }) => {
+      if (!profile) return;
+      setAddress((a) => a || profile.address);
+      setPin((p) => p ?? { lat: profile.lat, lng: profile.lng });
+      setPhone((p) => p || profile.phone || "");
+    }).catch(() => {});
+  }, []);
 
   const items = (Object.entries(picked) as [Category, WeightBucket][]).map(([cat, bucket]) => ({ cat, bucket }));
   const est = payout(items.map((i) => ({ cat: i.cat, kg: WEIGHT_BUCKETS[i.bucket] })));
@@ -56,8 +77,8 @@ export function NewPickup({ onCreated }: { onCreated: () => void }) {
     if (!items.length || !pin) return setErr(!items.length ? t("whatToGive") : t("tapMap"));
     setBusy(true);
     try {
-      const date = ymd(new Date(Date.now() + day * 86400000));
-      await api.create({ items, lat: pin.lat, lng: pin.lng, address, date, slot, phone: phone || undefined });
+      await api.create({ items, lat: pin.lat, lng: pin.lng, address, date, slot, phone: phone || undefined, notes: notes.trim() || undefined });
+      api.saveProfile({ address, lat: pin.lat, lng: pin.lng, phone: phone || undefined }).catch(() => {});
       setPicked({});
       onCreated();
     } catch (x) {
@@ -111,22 +132,18 @@ export function NewPickup({ onCreated }: { onCreated: () => void }) {
       </button>
       <p className="muted">{t("tapMap")}</p>
       <MapView pin={pin} onPick={setPin} />
-      <div className="row">
-        <label>
-          {t("day")}
-          <select value={day} onChange={(e) => setDay(Number(e.target.value) as 0 | 1)}>
-            <option value={0}>{t("today")}</option>
-            <option value={1}>{t("tomorrow")}</option>
-          </select>
-        </label>
-        <label>
-          &nbsp;
-          <select aria-label={t("slot")} value={slot} onChange={(e) => setSlot(e.target.value as "morning" | "evening")}>
-            <option value="morning">{t("morning")}</option>
-            <option value="evening">{t("evening")}</option>
-          </select>
-        </label>
-      </div>
+      <Schedule
+        date={date}
+        slot={slot}
+        onChange={(d, sl) => {
+          setDate(d);
+          setSlot(sl);
+        }}
+      />
+      <label>
+        {t("notes")}
+        <input maxLength={140} placeholder={t("notesHint")} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </label>
       <label>
         {t("phone")}
         <input type="tel" inputMode="tel" pattern="\+?\d{10,13}" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />

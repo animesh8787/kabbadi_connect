@@ -15,7 +15,18 @@ export type WeightBucket = keyof typeof WEIGHT_BUCKETS;
 export const STATUSES = ["OPEN", "ASSIGNED", "EN_ROUTE", "PICKED", "MISSED", "CANCELLED"] as const;
 export type Status = (typeof STATUSES)[number];
 
-export const SLOTS = { morning: [8, 12], evening: [16, 20] } as const;
+/** Two-hour slots for booking; "morning" and "evening" are older wider slots kept so existing requests still work. */
+export const SLOTS = {
+  s0810: [8, 10],
+  s1012: [10, 12],
+  s1214: [12, 14],
+  s1416: [14, 16],
+  s1618: [16, 18],
+  s1820: [18, 20],
+  morning: [8, 12],
+  evening: [16, 20],
+} as const;
+export const BOOKABLE_SLOTS = ["s0810", "s1012", "s1214", "s1416", "s1618", "s1820"] as const;
 export type Slot = keyof typeof SLOTS;
 
 export const BATCH_MIN_KG = 15;
@@ -34,8 +45,10 @@ export const CreateRequestSchema = z.object({
   lng,
   address: z.string().trim().min(3).max(200),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  slot: z.enum(["morning", "evening"]),
+  slot: z.enum(Object.keys(SLOTS) as [Slot, ...Slot[]]),
   phone: z.string().regex(/^\+?\d{10,13}$/).optional(),
+  /** Free text for the kabadiwala: gate number, "call before coming". */
+  notes: z.string().trim().max(140).optional(),
 });
 export type CreateRequest = z.infer<typeof CreateRequestSchema>;
 
@@ -87,3 +100,35 @@ export function monthRangeMs(month: string): [number, number] {
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
   return [Date.parse(`${month}-01T00:00:00+05:30`), Date.parse(`${next}-01T00:00:00+05:30`)];
 }
+
+const h12 = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? "am" : "pm"}`;
+export const slotLabel = (slot: string): string => {
+  const w = SLOTS[slot as Slot];
+  return w ? `${h12(w[0])}\u2013${h12(w[1])}` : slot;
+};
+
+export const RescheduleSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  slot: z.enum(Object.keys(SLOTS) as [Slot, ...Slot[]]),
+});
+
+export const ProfileSchema = z.object({
+  address: z.string().trim().min(3).max(200),
+  lat,
+  lng,
+  phone: PhoneSchema.optional(),
+});
+export type Profile = z.infer<typeof ProfileSchema>;
+
+/** A booking the assistant proposes; the household must confirm before anything is created. */
+export const BookingProposalSchema = z.object({
+  items: ItemsSchema,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  slot: z.enum(Object.keys(SLOTS) as [Slot, ...Slot[]]),
+  notes: z.string().trim().max(140).optional(),
+});
+
+/** Rough weight bucket for a spoken or typed kg value. */
+export const bucketOf = (kg: number): WeightBucket => (kg < 2 ? "<2" : kg < 5 ? "2-5" : kg < 10 ? "5-10" : "10+");
+
+export * from "./nav.js";

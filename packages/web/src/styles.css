@@ -161,3 +161,16 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 .bigstat span { color: var(--muted); font-size: 0.82rem; }
 table.rates { width: 100%; border-collapse: collapse; }
 table.rates td, table.rates th { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+
+/* ---------- household chat ---------- */
+.chat-log { display: grid; gap: 8px; max-height: 320px; overflow-y: auto; }
+.bubble { margin: 0; padding: 8px 12px; border-radius: 12px; max-width: 92%; white-space: pre-wrap; }
+.bubble.user { background: color-mix(in srgb, var(--green) 18%, var(--card)); justify-self: end; }
+.bubble.assistant { background: var(--bg); border: 1px solid var(--line); justify-self: start; }
+.chat-input { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.chat-input button.live { background: var(--err); color: #fff; border-color: var(--err); }
+.eta { margin: 0; font-weight: 600; color: var(--green-dark); }
+
+/* ---------- navigation ---------- */
+.nav-banner { font-size: 1.5rem; font-family: var(--display); line-height: 1.3; padding: 8px 0; }
+.bolo-row .big.on { background: var(--green); color: #fff; }

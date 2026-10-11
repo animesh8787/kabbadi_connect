@@ -160,3 +160,18 @@ export async function finishGoogle(): Promise<Session> {
   if (!res.ok || !t.id_token || !t.refresh_token) throw new Error("sign-in failed");
   return save(parse(t.id_token, t.refresh_token, cfg.clientId));
 }
+
+/** Collectors who read can sign in with their phone number and a password (set by an admin or in their settings). */
+export async function signInCollector(phone: string, password: string): Promise<Session> {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  const r = await cognito.send(
+    new InitiateAuthCommand({
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: cfg.collectorClientId,
+      AuthParameters: { USERNAME: `${digits}@collectors.kabadi.invalid`, PASSWORD: password },
+    }),
+  );
+  const t = r.AuthenticationResult;
+  if (!t?.IdToken || !t.RefreshToken) throw new Error("sign-in failed");
+  return save(parse(t.IdToken, t.RefreshToken, cfg.collectorClientId));
+}

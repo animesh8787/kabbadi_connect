@@ -49,6 +49,7 @@ export async function loadBatches(sub: string) {
         items: r.items as { cat: Category; bucket: string; estKg: number }[],
         estKg: r.estKg as number,
         phone: r.phone as string | undefined,
+        notes: r.notes as string | undefined,
         actual: r.actual,
         payout: r.payout,
       }));

@@ -176,7 +176,7 @@ Resources:
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       PreventUserExistenceErrors: ENABLED
-      ExplicitAuthFlows: [ALLOW_CUSTOM_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      ExplicitAuthFlows: [ALLOW_CUSTOM_AUTH, ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
       AccessTokenValidity: 60
       IdTokenValidity: 60
       RefreshTokenValidity: 3650
@@ -279,6 +279,7 @@ Resources:
         - { ResourcePath: "/*", HttpMethod: "*", ThrottlingBurstLimit: 50, ThrottlingRateLimit: 25, MetricsEnabled: true }
         - { ResourcePath: "/demo/start", HttpMethod: POST, ThrottlingBurstLimit: 5, ThrottlingRateLimit: 1 }
         - { ResourcePath: "/public/impact", HttpMethod: GET, ThrottlingBurstLimit: 20, ThrottlingRateLimit: 5 }
+        - { ResourcePath: "/public/join", HttpMethod: POST, ThrottlingBurstLimit: 3, ThrottlingRateLimit: 1 }
       GatewayResponses:
         DEFAULT_4XX:
           ResponseParameters:
@@ -586,8 +587,215 @@ Resources:
           - { Effect: Allow, Action: rekognition:DetectLabels, Resource: "*" }
           - { Effect: Allow, Action: transcribe:StartStreamTranscription, Resource: "*" }
           - Effect: Allow
-            Action: ssm:GetParameters
-            Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kabadi/bhashini/*
+            Action: [ssm:GetParameters, ssm:GetParameter]
+            Resource:
+              - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kabadi/bhashini/*
+              - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/kabadi/groq/*
+
+  # ---------- scheduling, nearby board, navigation, household assistant ----------
+  NearbyFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref NearbyFnLogs
+      Handler: board.nearby
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/nearby", Method: get } }
+
+  ClaimFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref ClaimFnLogs
+      Handler: board.claim
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: geo-routes:OptimizeWaypoints, Resource: "*" }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/nearby/{id}/claim", Method: post } }
+
+  CollectorSettingsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref CollectorSettingsFnLogs
+      Handler: board.settings
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/settings", Method: put } }
+
+  PositionFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref PositionFnLogs
+      Handler: board.position
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/position", Method: post } }
+
+  EtaFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref EtaFnLogs
+      Handler: board.eta
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/eta", Method: get } }
+
+  RescheduleFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref RescheduleFnLogs
+      Handler: requests.reschedule
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/requests/{id}/reschedule", Method: post } }
+
+  GetProfileFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref GetProfileFnLogs
+      Handler: profile.getProfile
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/me/profile", Method: get } }
+
+  PutProfileFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref PutProfileFnLogs
+      Handler: profile.putProfile
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/me/profile", Method: put } }
+
+  HouseholdAssistantFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref HouseholdAssistantFnLogs
+      Handler: hassistant.householdAssistant
+      Timeout: 29
+      MemorySize: 512
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - !Ref SpeechPolicy
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/household/assistant", Method: post } }
+
+  RouteFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref RouteFnLogs
+      Handler: nav.routeTo
+      Timeout: 20
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: geo-routes:CalculateRoutes, Resource: "*" }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/route", Method: get } }
+
+  AdminSetPasswordFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref AdminSetPasswordFnLogs
+      Handler: admin.adminSetPassword
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: [cognito-idp:AdminSetUserPassword], Resource: !GetAtt UserPool.Arn }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/collectors/{id}/password", Method: post } }
+
+  OwnPasswordFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref OwnPasswordFnLogs
+      Handler: admin.ownPassword
+      Environment: { Variables: { USER_POOL_ID: !Ref UserPool } }
+      Policies:
+        - Statement:
+            - { Effect: Allow, Action: [cognito-idp:AdminSetUserPassword], Resource: !GetAtt UserPool.Arn }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/collector/password", Method: post } }
+
+  UnassignedFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref UnassignedFnLogs
+      Handler: admin.unassigned
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/unassigned", Method: get } }
+
+  AssignFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref AssignFnLogs
+      Handler: admin.assign
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+        - Statement:
+            - { Effect: Allow, Action: geo-routes:OptimizeWaypoints, Resource: "*" }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/unassigned/{id}/assign", Method: post } }
+
+  ListJoinsFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref ListJoinsFnLogs
+      Handler: admin.listJoins
+      Policies:
+        - DynamoDBReadPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/joins", Method: get } }
+
+  DeleteJoinFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref DeleteJoinFnLogs
+      Handler: admin.deleteJoin
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Call: { Type: Api, Properties: { RestApiId: !Ref Api, Path: "/admin/joins/{id}", Method: delete } }
+
+  SubmitJoinFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      LoggingConfig:
+        LogGroup: !Ref SubmitJoinFnLogs
+      Handler: admin.submitJoin
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Table }
+      Events:
+        Post:
+          Type: Api
+          Properties: { RestApiId: !Ref Api, Path: /public/join, Method: post, Auth: { Authorizer: NONE } }
 
   # ---------- web hosting ----------
   SiteBucket:
@@ -707,6 +915,91 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref OpsTopic]
+
+  NearbyFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ClaimFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  CollectorSettingsFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  PositionFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  EtaFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  RescheduleFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  GetProfileFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  PutProfileFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  HouseholdAssistantFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  RouteFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AdminSetPasswordFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  OwnPasswordFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  UnassignedFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  AssignFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  ListJoinsFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  DeleteJoinFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  SubmitJoinFnLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
 
   PublicImpactFnLogs:
     Type: AWS::Logs::LogGroup

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { confirmSignUp, googleEnabled, signIn, signUp, startGoogle, type Session } from "./auth";
+import { confirmSignUp, googleEnabled, signIn, signInCollector, signUp, startGoogle, type Session } from "./auth";
 import { useT } from "./i18n";
 
 export function Login({ onDone }: { onDone: (s: Session) => void }) {
   const t = useT();
+  const [who, setWho] = useState<"house" | "kab">("house");
+  const [phone, setPhone] = useState("");
   const [mode, setMode] = useState<"in" | "up" | "code">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +18,9 @@ export function Login({ onDone }: { onDone: (s: Session) => void }) {
     setErr("");
     setBusy(true);
     try {
-      if (mode === "up") {
+      if (who === "kab") {
+        onDone(await signInCollector(phone, password));
+      } else if (mode === "up") {
         await signUp(email, password);
         setMode("code");
       } else if (mode === "code") {
@@ -39,7 +43,35 @@ export function Login({ onDone }: { onDone: (s: Session) => void }) {
           ← {t("app")}
         </a>
         <h1>{t("login_title")}</h1>
-        {googleEnabled() && mode !== "code" && (
+        <div className="subtabs" role="tablist">
+          {(["house", "kab"] as const).map((w) => (
+            <button type="button" role="tab" aria-selected={who === w} key={w} className={who === w ? "on" : ""} onClick={() => (setWho(w), setErr(""))}>
+              {t(w === "house" ? "login_tab_house" : "login_tab_kab")}
+            </button>
+          ))}
+        </div>
+        {who === "kab" && (
+          <>
+            <label>
+              {t("phoneNo")}
+              <input type="tel" inputMode="tel" autoComplete="tel" required pattern="\+?\d{10,13}" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </label>
+            <label>
+              {t("password")}
+              <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <p className="muted">{t("kab_hint")}</p>
+            {err && (
+              <p className="error" role="alert">
+                {err}
+              </p>
+            )}
+            <button className="primary" disabled={busy}>
+              {t("signIn")}
+            </button>
+          </>
+        )}
+        {who === "house" && googleEnabled() && mode !== "code" && (
           <>
             <button type="button" className="google" onClick={() => startGoogle()}>
               {t("login_google")}
@@ -49,6 +81,8 @@ export function Login({ onDone }: { onDone: (s: Session) => void }) {
             </p>
           </>
         )}
+        {who === "house" && (
+        <>
         <label>
           {t("email")}
           <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={mode === "code"} />
@@ -84,6 +118,8 @@ export function Login({ onDone }: { onDone: (s: Session) => void }) {
           <button type="button" className="link" onClick={() => setMode(mode === "in" ? "up" : "in")}>
             {mode === "in" ? t("noAccount") : t("haveAccount")}
           </button>
+        )}
+        </>
         )}
       </form>
     </div>

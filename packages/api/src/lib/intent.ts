@@ -1,5 +1,6 @@
-import { CATEGORIES, ConfirmSchema, type Category } from "@kc/shared";
+import { CATEGORIES, ConfirmSchema, ewaste, factors, type Category } from "@kc/shared";
 import type { ToolCall } from "./bedrock.js";
+import { tool, type ToolDef } from "./llm.js";
 
 /**
  * Turns a model tool call into what the phone should say and do. The model only picks the intent and
@@ -28,7 +29,9 @@ export type Action =
   | { type: "confirm"; stopId: string; items: { cat: Category; actualKg: number }[]; segregation?: "good" | "mixed" }
   | { type: "missed"; stopId: string }
   | { type: "call"; phone: string }
-  | { type: "navigate"; lat: number; lng: number };
+  | { type: "navigate"; lat: number; lng: number }
+  /** The phone answers from its live navigation state ("ab kidhar mudna hai"). */
+  | { type: "next_turn" };
 
 export interface Plan {
   say: string;
@@ -68,6 +71,13 @@ export function planReply(call: ToolCall | null, batches: BatchView[], focusId?:
       const kg = Math.round(open.reduce((s, x) => s + x.estKg, 0));
       return { say: `आज ${all.length} पिकअप हैं। ${done} हो चुकी हैं, ${open.length} बाकी हैं, लगभग ${kg} किलो।` };
     }
+    case "answer": {
+      // A free-form reply the model wrote from the context it was given; capped, never an action.
+      const text = typeof call.input.text === "string" ? call.input.text.trim().slice(0, 450) : "";
+      return { say: text || UNCLEAR };
+    }
+    case "next_turn":
+      return { say: "", action: { type: "next_turn" } };
     case "next_stop":
       if (!stop) return { say: "अभी कोई पिकअप बाकी नहीं है।" };
       return { say: `अगला पता: ${stop.address}। ${itemsHi(stop)}। लगभग ${Math.round(stop.estKg)} किलो।`, action: { type: "focus", stopId: stop.id } };
@@ -106,43 +116,74 @@ export function planReply(call: ToolCall | null, batches: BatchView[], focusId?:
 
 const catList = CATEGORIES.join("|");
 
-export const SYSTEM = `You are the voice assistant for an Indian kabadiwala (scrap collector). They speak Hindi, Hinglish or Devanagari, often with street noise, so the transcript may be imperfect. Pick exactly one tool. Never explain.
-Tools: next_stop ("agla ghar", "kahan jana hai"), today_summary ("kitne pickup", "aaj ka hisaab"), start_batch ("shuru karo", "chalo"), confirm_pickup (they report weights collected), mark_not_home ("ghar par koi nahi", "band hai"), call_household ("phone lagao"), navigate ("rasta batao", "map kholo"), unclear (anything else or too garbled).
+export const SYSTEM = `You are the voice assistant of Kabadi Connect for an Indian kabadiwala (scrap collector). They speak Hindi, Hinglish or Devanagari, often with street noise, so the transcript may be imperfect.
+Always call exactly one tool. Never write plain text outside a tool.
+- If they ask a question (earnings, rates, how to sort, where to take e-waste, how many pickups, what is next, anything about their work), call answer with a short, friendly reply in their language (Devanagari Hindi unless they wrote English). Use ONLY the facts in CONTEXT. If the fact is not there, say you do not know. Never invent amounts, addresses or names, and never read out phone numbers.
+- If they want to do something, call the matching tool: next_stop ("agla ghar"), today_summary ("kitne pickup"), start_batch ("shuru karo"), confirm_pickup (they report weights collected), mark_not_home ("ghar par koi nahi"), call_household ("phone lagao"), navigate ("rasta batao", "map kholo"), next_turn ("ab kidhar mudna hai", "aage kahan").
+- If it is not about their work or too garbled, call answer asking them to repeat.
 Materials: ${catList}. Map kagaz/raddi/gatta/akhbaar -> paper; plastic/botal/dibba -> plastic; loha/lohe/tin/dhatu/steel/peetal -> metal; e-waste/bijli ka saman/mobile/charger/computer -> ewaste; kaanch/sheesha/bottle of glass -> glass.
 Weights are kilograms: "dhai"=2.5, "dedh"=1.5, "paune do"=1.75, "sade teen"=3.5, "paanch"=5, "das"=10. Gram values convert to kg. Use only numbers the speaker said.
 segregation: "good" if they say the waste was well sorted ("achha alag kiya"), "mixed" if mixed or dirty ("mix tha", "ganda"); omit otherwise.`;
 
-export const TOOLS = {
-  tools: [
-    { toolSpec: { name: "next_stop", description: "Read the next pickup address", inputSchema: { json: { type: "object", properties: {} } } } },
-    { toolSpec: { name: "today_summary", description: "Summary of today's pickups", inputSchema: { json: { type: "object", properties: {} } } } },
-    { toolSpec: { name: "start_batch", description: "Start today's route", inputSchema: { json: { type: "object", properties: {} } } } },
-    {
-      toolSpec: {
-        name: "confirm_pickup",
-        description: "Record the weights collected at the current stop",
-        inputSchema: {
-          json: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-                items: { type: "object", properties: { cat: { type: "string", enum: [...CATEGORIES] }, kg: { type: "number" } }, required: ["cat", "kg"] },
-              },
-              segregation: { type: "string", enum: ["good", "mixed"] },
-            },
-            required: ["items"],
-          },
-        },
-      },
-    },
-    { toolSpec: { name: "mark_not_home", description: "Nobody home at the current stop", inputSchema: { json: { type: "object", properties: {} } } } },
-    { toolSpec: { name: "call_household", description: "Call the household at the current stop", inputSchema: { json: { type: "object", properties: {} } } } },
-    { toolSpec: { name: "navigate", description: "Open directions to the current stop", inputSchema: { json: { type: "object", properties: {} } } } },
-    { toolSpec: { name: "unclear", description: "Request not understood", inputSchema: { json: { type: "object", properties: {} } } } },
-  ],
-  toolChoice: { any: {} },
+const itemsSchema = {
+  type: "array",
+  items: { type: "object", properties: { cat: { type: "string", enum: [...CATEGORIES] }, kg: { type: "number" } }, required: ["cat", "kg"] },
+};
+
+export const COLLECTOR_TOOLS: ToolDef[] = [
+  tool("answer", "Reply to a question or small talk using only the CONTEXT", { type: "object", properties: { text: { type: "string" } }, required: ["text"] }),
+  tool("next_stop", "Read the next pickup"),
+  tool("today_summary", "Summary of today's pickups"),
+  tool("start_batch", "Start today's route"),
+  tool("confirm_pickup", "Record the weights collected at the current stop", {
+    type: "object",
+    properties: { items: itemsSchema, segregation: { type: "string", enum: ["good", "mixed"] } },
+    required: ["items"],
+  }),
+  tool("mark_not_home", "Nobody home at the current stop"),
+  tool("call_household", "Call the household at the current stop"),
+  tool("navigate", "Open turn-by-turn directions to the current stop"),
+  tool("next_turn", "Say the next turn of the route being navigated"),
+];
+
+/** Short sorting advice the assistants can quote; kept in step with the guide in the app. */
+export const SORT_TIPS = {
+  paper: "Dry and flat. Newspapers, cardboard, books. Not greasy boxes.",
+  plastic: "Rinse bottles and containers; keep caps and bags separate.",
+  metal: "Tins, iron, steel, brass. Wrap sharp pieces.",
+  ewaste: "Phones, chargers, cables, batteries: never in the bin. Give them to a collector who takes them to an authorised recycler.",
+  glass: "Rinsed bottles and jars. Wrap broken glass in paper.",
 } as const;
+
+export const referenceFacts = () =>
+  [
+    `Default rates (Rs per kg): ${CATEGORIES.map((c) => `${c} ${factors.ratePerKg[c]}`).join(", ")} (as of ${factors.ratesAsOf}; collectors may post their own).`,
+    `Sorting tips: ${CATEGORIES.map((c) => `${c}: ${SORT_TIPS[c]}`).join(" ")}`,
+    `Authorised e-waste recyclers in Delhi (2023 list): ${ewaste.recyclers.map((r) => r.name).join("; ")}.`,
+  ].join("\n");
+
+/** What the collector assistant may use to answer. Stops are numbered, not addressed; no phone numbers. */
+export function collectorContext(o: { batches: BatchView[]; month?: { kg: number; payout: number; pickups: number; verifiedPickups: number }; nearby?: number; now: Date }): string {
+  const stops = o.batches.flatMap((b) => b.stops.map((s) => ({ s, batch: b.status })));
+  const lines = stops.map(({ s }, i) => `${i + 1}) [${s.status}] ${s.items.map((x) => x.cat).join("+")} ~${Math.round(s.estKg)} kg`);
+  return [
+    `Now (IST): ${new Date(o.now.getTime() + 5.5 * 3600_000).toISOString().replace("T", " ").slice(0, 16)}`,
+    stops.length ? `Today's stops in route order:\n${lines.join("\n")}` : "No pickups assigned today.",
+    o.month ? `This month: ${o.month.pickups} pickups, ${o.month.kg} kg collected, Rs ${o.month.payout} earned, ${o.month.verifiedPickups} confirmed by households.` : "",
+    o.nearby !== undefined ? `Unclaimed requests near them: ${o.nearby}.` : "",
+    referenceFacts(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The last few turns, so "and the day before?" makes sense. Plain text: works the same for every provider. */
+export function historyText(history: { role: "user" | "assistant"; text: string }[] | undefined): string {
+  return (history ?? [])
+    .slice(-6)
+    .map((h) => `${h.role === "user" ? "User" : "Assistant"}: ${h.text.slice(0, 300)}`)
+    .join("\n");
+}
 
 // ---------------------------------------------------------------------------------------------
 // Offline fallback: keyword intents for when the model is unavailable. Covers the common phrases only;
@@ -205,6 +246,7 @@ export function ruleIntent(text: string): ToolCall | null {
   }
   const rules: [RegExp, string][] = [
     [/(कोई नहीं|ghar par nahi|ghar pe nahi|koi nahi|बंद है|band hai|darwaza band|दरवाज़ा बंद|koi nahi mila|not home)/, "mark_not_home"],
+    [/(kidhar mud|किधर मुड़|mudna|मुड़ना)/, "next_turn"],
     [/(अगला|agla|agle|aage kahan|आगे कहाँ|कहाँ जाना|kahan jana|next)/, "next_stop"],
     [/(कितने|kitne|kitna hua|कितना हुआ|kitna kamaya|कितना कमाया|हिसाब|hisaab|hisab|summary)/, "today_summary"],
     [/(शुरू|shuru|chalo|चलो|start karo|start)/, "start_batch"],
