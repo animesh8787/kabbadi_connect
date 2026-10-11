@@ -37,9 +37,12 @@ async function viaGroq(o: { system: string; user: string; tools: ToolDef[]; maxT
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: o.smart ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant",
+      // Groq retires models over time; these were the tool-capable ones on the free tier when last checked (see GET /openai/v1/models).
+      model: o.smart ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
       temperature: 0,
-      max_tokens: o.maxTokens,
+      reasoning_effort: "low",
+      // reasoning tokens count towards the limit, so leave room beyond the short tool call
+      max_tokens: Math.max(o.maxTokens, 1200),
       tool_choice: "required",
       messages: [
         { role: "system", content: o.system },

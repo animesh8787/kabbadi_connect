@@ -13,7 +13,7 @@ import { activeCollectors, covers, toCollector } from "../lib/collectors.js";
 import { queryAll, TABLE } from "../lib/ddb.js";
 
 export const HistorySchema = z
-  .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(300) }))
+  .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(600) }))
   .max(12)
   .optional();
 

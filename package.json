@@ -14,7 +14,8 @@
     "smoke": "tsx scripts/smoke.ts",
     "card": "tsx scripts/card.ts",
     "e2e": "playwright test",
-    "qr": "tsx scripts/qr.ts"
+    "qr": "tsx scripts/qr.ts",
+    "ask": "tsx scripts/ask.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

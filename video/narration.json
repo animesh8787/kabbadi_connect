@@ -1,0 +1,10 @@
+{
+  "s1_problem": "India's recycling runs on kabadiwalas, the informal scrap collectors you see on every street. Millions of people, and no digital tools. Households never know when they will come, collectors walk empty lanes, and many cannot use an app that asks for an email and a password. This is Kabadi Connect, our project for the AWS Environmental Hacks, Waste and Energy track.",
+  "s2_household": "A household picks any of the next seven days and a two hour slot, or just types or says, kal shaam paanch kilo raddi. The assistant proposes a booking, and nothing is booked until they confirm.",
+  "s3_card": "The kabadiwala signs in by scanning a printed QR card. No email, no password. The code works once, and a lost phone can be blocked by an admin.",
+  "s4_voice": "The screen is Hindi first. The collector holds the mic and asks in Hindi. Amazon Transcribe hears it, a language model picks the action, and Amazon Polly answers in Hindi. Nothing is saved until the collector says haan.",
+  "s5_nav": "Tap a stop and the app speaks turn by turn directions in Hindi, built on Amazon Location Service. Stops are ordered with Optimize Waypoints to save walking, and the household sees how far away the kabadiwala is.",
+  "s6_arch": "Under the hood, one SAM template deploys everything. React on S3 and CloudFront, API Gateway with Cognito, Lambda and DynamoDB, where conditional transactions make every pickup assignment happen exactly once. SQS and EventBridge dispatch requests. Location Service handles maps and routes. Polly, Transcribe, Rekognition and Bedrock power voice and photos, each with a fallback, so the app keeps working when one service is unavailable.",
+  "s7_impact": "Impact is counted only from weights the collector measured, and households can confirm them. Our methodology page shows every formula and source, and what we do not claim.",
+  "s8_learn": "We learned that designing for the person who reads least makes everything simpler. Next is a one neighbourhood pilot with five kabadiwalas. Thank you."
+}

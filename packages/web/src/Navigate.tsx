@@ -106,7 +106,7 @@ export function Navigate({ stop, index, onClose, onArrive }: { stop: Stop; index
     status === "locating" ? t("nav_locating") : status === "denied" ? t("nav_denied") : status === "fail" ? t("nav_fail") : status === "off" ? t("nav_off") : status === "arrived" ? t("nav_arrived") : text || t("nav_locating");
 
   return (
-    <section className="card nav" aria-live="polite">
+    <section className="card navscreen" aria-live="polite">
       <div className="nav-banner" data-testid="nav-banner">
         <strong>{banner}</strong>
         {meters !== null && status === "ok" && <span className="muted"> · {meters} m</span>}

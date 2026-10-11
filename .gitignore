@@ -7,3 +7,7 @@ packages/web/public/config.json
 .seed-credentials.json
 test-results
 playwright-report
+video/out
+video/audio
+video/clips
+video/slides/*.png

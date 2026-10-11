@@ -51,7 +51,8 @@ describe("LLM chain: Bedrock, then Groq, then nothing", () => {
     const r = await chooseTool({ system: "s", user: "u", tools, smart: true });
     expect(r).toEqual({ call: { name: "answer", input: { text: "namaste" } }, via: "groq" });
     const sent = JSON.parse(fetchMock.mock.calls[0]![1].body);
-    expect(sent.model).toBe("llama-3.3-70b-versatile");
+    expect(sent.model).toBe("openai/gpt-oss-120b");
+    expect(sent.reasoning_effort).toBe("low");
     expect(sent.tool_choice).toBe("required");
     expect(fetchMock.mock.calls[0]![1].headers.authorization).toBe("Bearer gsk_test");
     await chooseTool({ system: "s", user: "u", tools });
@@ -63,7 +64,7 @@ describe("LLM chain: Bedrock, then Groq, then nothing", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [] }) });
     vi.stubGlobal("fetch", fetchMock);
     await chooseTool({ system: "s", user: "u", tools });
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body).model).toBe("llama-3.1-8b-instant");
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body).model).toBe("openai/gpt-oss-20b");
   });
   it("returns no call (callers use keyword rules) when there is no Groq key or Groq errors", async () => {
     bedrock.toolCall.mockRejectedValue(new Error("verified"));
