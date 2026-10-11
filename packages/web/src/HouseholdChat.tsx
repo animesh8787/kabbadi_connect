@@ -36,7 +36,8 @@ export function HouseholdChat({ onChanged, onOpenForm }: { onChanged: () => void
     setPending(null);
     try {
       const r = await api.householdAssistant({ ...b, speak: !!b.audio, history: history() });
-      if (r.heard) add({ role: "user", text: r.heard });
+      // A typed message is already on screen; only a spoken one needs its transcript shown.
+      if (b.audio && r.heard) add({ role: "user", text: r.heard });
       add({ role: "assistant", text: r.say });
       if (r.audio) void play(r.audio, r.audioMime ?? "audio/mpeg");
       if (r.action && r.needsConfirm) setPending(r.action);

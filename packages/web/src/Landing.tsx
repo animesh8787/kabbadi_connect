@@ -153,6 +153,8 @@ export function Landing({ session }: { session: Session | null }) {
           </div>
         </div>
 
+        <p className="muted" style={{ marginTop: -48, marginBottom: 56 }}>{t("l_s_note")}</p>
+
         <section className="section" id="how">
           <span className="eyebrow">01</span>
           <h2>{t("l_how")}</h2>

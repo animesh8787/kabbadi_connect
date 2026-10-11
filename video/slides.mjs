@@ -57,6 +57,21 @@ const slides = {
     <div style="margin-top:44px"><span class="pill">AWS SAM CLI</span><span class="pill">AWS SDK for JavaScript v3</span><span class="pill">AWS CLI v2</span></div>
     <div style="margin-top:20px;font-size:28px;color:#cfc5b2">Model order: Bedrock → free Groq model → keyword rules. The app never stops working.</div></div>`,
 
+  tests: `<div class="wrap"><div class="eyebrow">Quality</div><h2>Tested <em>three ways</em></h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:30px">
+      <div class="box g" style="padding:40px"><div style="font:300 120px 'Fraunces',serif;color:#3ecf8e;line-height:1">90</div>unit tests<small>batching, routing, handlers with mocked AWS, card login, voice, scheduling, directions</small></div>
+      <div class="box g" style="padding:40px"><div style="font:300 120px 'Fraunces',serif;color:#3ecf8e;line-height:1">33</div>browser tests<small>phone-size screens, assistants, navigation, WCAG A/AA accessibility</small></div>
+      <div class="box g" style="padding:40px"><div style="font:300 120px 'Fraunces',serif;color:#3ecf8e;line-height:1">100+</div>live checks<small>smoke test on the deployed stack: request → dispatch → pickup → impact</small></div>
+    </div></div>`,
+
+  lessons: `<div class="wrap"><div class="eyebrow">Learning &amp; growth</div><h2>What <em>fought back</em></h2>
+    <div style="display:grid;gap:22px;margin-top:20px">
+      <div class="box o"><b>Matching by map cell</b> left a new town with no collector → <b style="color:#3ecf8e">service radius + a nearby board</b></div>
+      <div class="box o"><b>Map key referer</b> blocked MapLibre's blob web worker (403) → <b style="color:#3ecf8e">same-origin worker</b></div>
+      <div class="box o"><b>Bedrock "being verified"</b> for a day → <b style="color:#3ecf8e">Rekognition, Groq and keyword fallbacks</b> behind one function</div>
+      <div class="box o"><b>"5 kilo raddi" cancelled pickups</b> ("radd" in "raddi") → <b style="color:#3ecf8e">a test caught it</b></div>
+    </div></div>`,
+
   close: `<div class="wrap"><div class="eyebrow">What's next</div><h2>A one-neighbourhood <em>pilot</em></h2>
     <ul><li>5 kabadiwalas · one resident association · 4 weeks</li><li>Android wrapper for background location</li><li>More languages through Bhashini</li><li>A phone line for basic phones</li></ul>
     <h1 style="font-size:110px;margin-top:40px">Kabadi <em>Connect</em></h1>

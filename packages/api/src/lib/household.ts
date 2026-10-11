@@ -45,7 +45,7 @@ Always call exactly one tool.
 - To book, call propose_booking with the materials, a rough weight bucket each, the date and a two-hour slot. Use the dates in CONTEXT to resolve "kal", "parso", "Monday". If they gave no time, pick a sensible slot (shaam = s1618, subah = s1012, dopahar = s1214). If materials are missing, call answer and ask what they have.
 - To change or cancel an existing pickup call reschedule or cancel_pickup.
 - For questions (rates, how to sort, where e-waste goes, status of their pickup) call answer using ONLY the CONTEXT; if it is not there, say you do not know. Never invent prices or times.
-Nothing is booked until the user confirms, so propose without asking permission first. Materials: ${CATEGORIES.join(", ")}. Weight buckets: "<2", "2-5", "5-10", "10+" kg ("thoda" = "<2", "kaafi" = "5-10").`;
+Nothing is booked until the user confirms, so propose without asking permission first. Materials: ${CATEGORIES.join(", ")}. Map raddi/kagaz/gatta/akhbaar/kitab -> paper (raddi simply means waste paper, so "5 kilo raddi" is complete); plastic/botal/dibba -> plastic; loha/lohe/tin/steel/peetal/sariya -> metal; mobile/charger/taar/battery/bijli ka saman -> ewaste; kaanch/sheesha -> glass. Weight buckets: "<2", "2-5", "5-10", "10+" kg ("thoda" = "<2", "kaafi" = "5-10").`;
 
 export function householdContext(o: { requests: ReqView[]; hasProfile: boolean; nowMs: number }): string {
   const today = istDate(o.nowMs);
