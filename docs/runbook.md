@@ -32,3 +32,17 @@ CloudFormation rolls failed deploys back. To go back to a previous release redep
 - Provider per call is in the Lambda log line `{"msg":"assistant","stt":...,"tts":...,"via":...}`; `via: rules` means Bedrock failed and keyword rules answered.
 - Enable Bhashini: put `/kabadi/bhashini/userId` and `/kabadi/bhashini/apiKey` in SSM Parameter Store (SecureString). The Lambda caches them for 5 minutes. Delete them to go back to AWS only.
 - Limits: 200 assistant turns and 20 photo estimates per user per day (table items `QUOTA#<sub>`, TTL 3 days).
+
+## Requests not reaching anyone
+- The dispatcher gives a request to an active collector whose service radius (default 8 km, collector settings) covers it, or whose listed map cells include it. Check the collector's home point and radius in admin > Collectors.
+- A light pickup is offered 12 hours before its slot; before that it still shows on the "Nearby requests" board of collectors in range.
+- Requests older than 2 hours with no taker are listed under "Waiting for a kabadiwala" (admin > Collectors); pick a collector and tap the tick.
+- Demo collectors never receive real requests.
+
+## Assistants (collector and household)
+- Log lines: `{"msg":"assistant"|"household assistant","via":"bedrock"|"groq"|"rules"}`. `rules` means no model was reachable (Bedrock blocked and no Groq key, or Groq over its free limit).
+- Groq key: `aws ssm put-parameter --region ap-south-1 --name /kabadi/groq/apiKey --type SecureString --overwrite --value <key>`; cached for 5 minutes. Delete the parameter to switch Groq off.
+- Limits per user per day: 200 collector turns (30 for demo users), 50 household turns, 300 route calculations.
+
+## Collector password sign-in
+Admin: add or edit a collector with a password, or POST `/admin/collectors/{id}/password`. Collectors can set their own in settings. A forgotten password is solved with a new QR card (`New card`).

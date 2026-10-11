@@ -55,3 +55,11 @@ export async function cardSignIn(clientId: string, username: string, code: strin
   if (!done.AuthenticationResult?.IdToken) throw new Error("card rejected");
   return done.AuthenticationResult.IdToken;
 }
+
+/** Sign in with a password on a given app client (collectors who read use this with their phone number). */
+export async function passwordSignIn(clientId: string, username: string, password: string): Promise<string> {
+  const r = await new CognitoIdentityProviderClient({ region }).send(
+    new InitiateAuthCommand({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: clientId, AuthParameters: { USERNAME: username, PASSWORD: password } }),
+  );
+  return r.AuthenticationResult!.IdToken!;
+}

@@ -77,6 +77,7 @@ export function Judges() {
         <li>
           <em>"ghar par koi nahi"</em>: marks nobody home.
         </li>
+        <li>Ask it anything about the day, for example <em>"is hafte kitna kamaya"</em> or <em>"e-waste kahan dun"</em>. Tap 🎧 for hands-free, and 🧭 on a stop for spoken Hindi turn-by-turn directions (needs location permission).</li>
         <li>Under the map, switch between the optimised route and the order the requests came in to see the km saved.</li>
         <li>Nothing is saved until the collector says or taps yes. You can type the weights instead: every voice action has a button.</li>
         <li>Open the e-waste stop to see the government-listed authorised recyclers; open the Statement tab for the monthly statement.</li>
@@ -84,13 +85,13 @@ export function Judges() {
 
       <h2>3. Household side</h2>
       <p>
-        <a href="/login">Sign up with an email</a> to book a pickup as a household (the app asks for the verification code Cognito emails you).
+        <a href="/login">Sign up with an email</a> to book a pickup as a household (the app asks for the verification code Cognito emails you). Pick any of the next 7 days and a two-hour slot, or tap <em>Speak</em> and type or say <em>"kal shaam 5 kilo raddi"</em>: the assistant proposes a booking and you confirm it.
       </p>
 
       <h2>What is live, and what is not</h2>
       <ul>
         <li>Hindi speech uses Amazon Transcribe and Polly. Bhashini is integrated but its API approval is pending, so it is not in use yet.</li>
-        <li>Understanding of what is said uses Amazon Bedrock when available, and keyword matching for the phrases above when it is not. Photo fill depends on Bedrock.</li>
+        <li>Understanding of what is said uses Amazon Bedrock when available, then Groq (a free model) for open questions, then keyword matching for the phrases above. Photo fill uses Bedrock or, failing that, Amazon Rekognition labels.</li>
         <li>
           Impact numbers and their limits are explained in <a href="/methodology">How we count impact</a>. CO₂ factors are indicative.
         </li>
